@@ -95,6 +95,7 @@
   .team-select-header .label{ font-size:14px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--navy); }
   .team-count{ font-size:12px; color:var(--muted); font-weight:600; }
   .team-count.warn{ color:var(--danger); }
+  .team-total{ font-size:20px; font-weight:800; color:var(--navy); }
 
   .pick-row{ display:flex; align-items:center; gap:10px; padding:8px 6px; border-bottom:1px solid var(--navy-mid); border-radius:6px; }
   .pick-row:last-child{ border-bottom:none; }
@@ -319,6 +320,12 @@ function fmtDate(d){
   const dt = new Date(d+'T00:00:00');
   return dt.toLocaleDateString('es-ES', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
 }
+function todayDDMMYYYY(){
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  return `${dd}.${mm}.${d.getFullYear()}`;
+}
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // ---------- Render root ----------
@@ -479,6 +486,7 @@ function renderPartidos(content){
 
 function openMatchView(matchId){
   const m = matches.find(x=>x.id===matchId);
+  const {v, n} = matchScore(m);
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
   const line = (team)=> (m[team]||[]).map(x=>{
@@ -490,9 +498,9 @@ function openMatchView(matchId){
       <div class="sheet-handle"></div>
       <h2 class="sheet-title">${fmtDate(m.date)}</h2>
       <div class="card">
-        <div class="team-select-header v"><div class="label">🟢 Equipo Verde</div></div>
+        <div class="team-select-header v"><div class="label">🟢 Equipo Verde</div><div class="team-total">${v}</div></div>
         ${line('verde')}
-        <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div></div>
+        <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="team-total">${n}</div></div>
         ${line('naranja')}
       </div>
       <button class="btn-ghost btn-block" id="closeViewBtn">Cerrar</button>
@@ -519,9 +527,9 @@ function openMatchForm(matchId){
         <div style="margin-top:6px;"><input type="date" id="matchDate" value="${work.date}"></div>
       </div>
       <div class="card">
-        <div class="team-select-header v"><div class="label">🟢 Equipo Verde</div><div class="team-count" id="countVerde">0/6</div></div>
+        <div class="team-select-header v"><div class="label">🟢 Equipo Verde</div><div class="row" style="gap:10px;"><div class="team-total" id="totalVerde">0</div><div class="team-count" id="countVerde">0/6</div></div></div>
         <div id="pickVerde"></div>
-        <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="team-count" id="countNaranja">0/6</div></div>
+        <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="row" style="gap:10px;"><div class="team-total" id="totalNaranja">0</div><div class="team-count" id="countNaranja">0/6</div></div></div>
         <div id="pickNaranja"></div>
         <div class="tip-box">💡 Puedes alinear al mismo jugador en los dos equipos si cambia de bando a mitad de partido para equilibrarlo.</div>
       </div>
@@ -534,7 +542,11 @@ function openMatchForm(matchId){
   document.body.appendChild(overlay);
 
   function isInTeam(team, id){ return work[team].some(x=>x.playerId===id); }
-  function goalsFor(team, id){ const x = work[team].find(x=>x.playerId===id); return x?x.goals:0; }
+  function goalsFor(team, id){ const x = work[team].find(x=>x.playerId===id); return (x && x.goals) ? x.goals : ''; }
+  function updateTotal(team, totalId){
+    const sum = work[team].reduce((s,x)=>s+(Number(x.goals)||0),0);
+    document.getElementById(totalId).textContent = sum;
+  }
   function renderPicker(team, containerId, countId){
     const container = document.getElementById(containerId);
     const otherTeam = team==='verde'?'naranja':'verde';
@@ -544,22 +556,31 @@ function openMatchForm(matchId){
       return `<div class="pick-row ${checked?'checked':''}">
           <input type="checkbox" data-team="${team}" data-id="${p.id}" ${checked?'checked':''}>
           <div class="pname">${escapeHtml(p.name)}${inBoth ? ' <span class="tag">EN AMBOS</span>' : ''}</div>
-          ${checked ? `<input type="number" class="goals-input" min="0" data-goals-team="${team}" data-goals-id="${p.id}" value="${goalsFor(team,p.id)}" placeholder="Goles">` : ''}
+          ${checked ? `<input type="number" inputmode="numeric" pattern="[0-9]*" class="goals-input" min="0" data-goals-team="${team}" data-goals-id="${p.id}" value="${goalsFor(team,p.id)}" placeholder="0">` : ''}
         </div>`;
     }).join('');
     document.getElementById(countId).textContent = `${work[team].length}/6`;
     document.getElementById(countId).classList.toggle('warn', work[team].length>0 && work[team].length<5);
+    updateTotal('verde','totalVerde');
+    updateTotal('naranja','totalNaranja');
     container.querySelectorAll('input[type=checkbox]').forEach(cb=>{
       cb.onchange = ()=>{
         const id = cb.dataset.id;
-        if(cb.checked) work[team].push({ playerId:id, goals:0 });
+        if(cb.checked) work[team].push({ playerId:id, goals:'' });
         else work[team] = work[team].filter(x=>x.playerId!==id);
         renderPicker('verde','pickVerde','countVerde');
         renderPicker('naranja','pickNaranja','countNaranja');
       };
     });
     container.querySelectorAll('input[type=number]').forEach(gi=>{
-      gi.oninput = ()=>{ const t=gi.dataset.goalsTeam, id=gi.dataset.goalsId; const entry=work[t].find(x=>x.playerId===id); if(entry) entry.goals = gi.value; };
+      gi.oninput = ()=>{
+        const clean = gi.value.replace(/[^0-9]/g, '');
+        if(clean !== gi.value) gi.value = clean;
+        const t=gi.dataset.goalsTeam, id=gi.dataset.goalsId;
+        const entry=work[t].find(x=>x.playerId===id);
+        if(entry) entry.goals = clean;
+        updateTotal(t, t==='verde'?'totalVerde':'totalNaranja');
+      };
     });
   }
   renderPicker('verde','pickVerde','countVerde');
@@ -608,7 +629,7 @@ function renderClasificacion(content){
     <div id="rankingCapture">
       <div class="rank-title-strip">
         <div class="rt">Clasificación</div>
-        <div class="rs">Fútbol Viernes · ${matches.length} partido${matches.length===1?'':'s'} jugado${matches.length===1?'':'s'}</div>
+        <div class="rs">${todayDDMMYYYY()} · ${matches.length} partido${matches.length===1?'':'s'} jugado${matches.length===1?'':'s'}</div>
       </div>
       ${stats.length===0 ? '<div class="empty"><div class="big">🏆</div>Todavía no hay estadísticas.</div>' : `
       <table class="rank">
