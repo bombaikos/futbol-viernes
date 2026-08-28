@@ -600,8 +600,8 @@ function openMatchForm(matchId){
   document.getElementById('saveMatchBtn').onclick = async ()=>{
     work.date = document.getElementById('matchDate').value;
     if(!work.date){ showToast('Indica una fecha'); return; }
-    if(work.verde.length < 5 || work.verde.length > 6){ showToast('El equipo Verde necesita 5 o 6 jugadores'); return; }
-    if(work.naranja.length < 5 || work.naranja.length > 6){ showToast('El equipo Naranja necesita 5 o 6 jugadores'); return; }
+    if(work.verde.length < 5 || work.verde.length > 7){ showToast('El equipo Verde necesita 5, 6 o 7 jugadores'); return; }
+    if(work.naranja.length < 5 || work.naranja.length > 7){ showToast('El equipo Naranja necesita 5, 6 o 7 jugadores'); return; }
     work.verde = work.verde.map(x=>({ playerId:x.playerId, goals: Number(x.goals)||0 }));
     work.naranja = work.naranja.map(x=>({ playerId:x.playerId, goals: Number(x.goals)||0 }));
     await saveMatchDoc(work);
