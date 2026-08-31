@@ -273,12 +273,7 @@ function computeStats(){
   const stats = {};
   players.forEach(p=>{ stats[p.id] = { id:p.id, name:p.name, pj:0, g:0, e:0, p:0, gf:0 }; });
   matches.forEach(m=>{
-    const vGoals = (m.verde||[]).reduce((s,x)=>s+(Number(x.goals)||0),0);
-    const nGoals = (m.naranja||[]).reduce((s,x)=>s+(Number(x.goals)||0),0);
-    let vRes, nRes;
-    if(vGoals > nGoals){ vRes='g'; nRes='p'; }
-    else if(vGoals < nGoals){ vRes='p'; nRes='g'; }
-    else { vRes='e'; nRes='e'; }
+    const { v: vGoals, n: nGoals, vRes, nRes } = calculaResultado(m);
 
     // Un jugador puede estar alineado en los dos equipos en el mismo partido
     // (p. ej. para equilibrar el resultado a mitad de partido).
@@ -314,6 +309,14 @@ function matchScore(m){
   const v = (m.verde||[]).reduce((s,x)=>s+(Number(x.goals)||0),0);
   const n = (m.naranja||[]).reduce((s,x)=>s+(Number(x.goals)||0),0);
   return {v,n};
+}
+function calculaResultado(m){
+  const {v,n} = matchScore(m);
+  let vRes, nRes;
+  if(v > n){ vRes='g'; nRes='p'; }
+  else if(v < n){ vRes='p'; nRes='g'; }
+  else { vRes='e'; nRes='e'; }
+  return {v, n, vRes, nRes};
 }
 function fmtDate(d){
   if(!d) return '';
@@ -498,10 +501,10 @@ function openMatchView(matchId){
       <div class="sheet-handle"></div>
       <h2 class="sheet-title">${fmtDate(m.date)}</h2>
       <div class="card">
-        <div class="team-select-header v"><div class="label">🟢 Equipo Verde <span class="team-total">${v}</span></div></div>
+        <div class="team-select-header v"><div class="label">🟢 Equipo Verde</div><div class="team-total">${v}</div></div>
         ${line('verde')}
-        <div class="team-select-header n"><div class="label">🟠 Equipo Naranja <span class="team-total">${n}</span></div></div>
-        ${line('naranja')}     
+        <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="team-total">${n}</div></div>
+        ${line('naranja')}
       </div>
       <button class="btn-ghost btn-block" id="closeViewBtn">Cerrar</button>
     </div>`;
@@ -600,8 +603,8 @@ function openMatchForm(matchId){
   document.getElementById('saveMatchBtn').onclick = async ()=>{
     work.date = document.getElementById('matchDate').value;
     if(!work.date){ showToast('Indica una fecha'); return; }
-    if(work.verde.length < 5 || work.verde.length > 7){ showToast('El equipo Verde necesita 5, 6 o 7 jugadores'); return; }
-    if(work.naranja.length < 5 || work.naranja.length > 7){ showToast('El equipo Naranja necesita 5, 6 o 7 jugadores'); return; }
+    if(work.verde.length < 5 || work.verde.length > 6){ showToast('El equipo Verde necesita 5 o 6 jugadores'); return; }
+    if(work.naranja.length < 5 || work.naranja.length > 6){ showToast('El equipo Naranja necesita 5 o 6 jugadores'); return; }
     work.verde = work.verde.map(x=>({ playerId:x.playerId, goals: Number(x.goals)||0 }));
     work.naranja = work.naranja.map(x=>({ playerId:x.playerId, goals: Number(x.goals)||0 }));
     await saveMatchDoc(work);
