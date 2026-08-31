@@ -501,10 +501,10 @@ function openMatchView(matchId){
       <div class="sheet-handle"></div>
       <h2 class="sheet-title">${fmtDate(m.date)}</h2>
       <div class="card">
-        <div class="team-select-header v"><div class="label">🟢 Equipo Verde</div><div class="team-total">${v}</div></div>
+        <div class="team-select-header v"><div class="label">🟢 Equipo Verde <span class="team-total">${v}</span></div></div>
         ${line('verde')}
-        <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="team-total">${n}</div></div>
-        ${line('naranja')}
+        <div class="team-select-header n"><div class="label">🟠 Equipo Naranja <span class="team-total">${n}</span></div></div>
+        ${line('naranja')}      
       </div>
       <button class="btn-ghost btn-block" id="closeViewBtn">Cerrar</button>
     </div>`;
