@@ -162,6 +162,7 @@ let players = [];
 let matches = [];
 let config = { pointsPerGoal: 1 };
 let activeTab = 'partidos';
+let sortBy = 'pts'; // 'pts' o 'gf'
 let playersLoaded = false, matchesLoaded = false, configLoaded = false;
 let isAdmin = false;
 
@@ -303,7 +304,10 @@ function computeStats(){
   });
   return Object.values(stats).map(s=>({
     ...s, pts: s.g*3 + s.e*1 + s.gf*(Number(config.pointsPerGoal)||0)
-  })).sort((a,b)=> b.pts - a.pts || b.gf - a.gf || a.name.localeCompare(b.name));
+  })).sort((a,b)=> sortBy==='gf'
+    ? (b.gf - a.gf || b.pts - a.pts || a.name.localeCompare(b.name))
+    : (b.pts - a.pts || b.gf - a.gf || a.name.localeCompare(b.name))
+  );
 }
 function matchScore(m){
   const v = (m.verde||[]).reduce((s,x)=>s+(Number(x.goals)||0),0);
@@ -489,6 +493,7 @@ function renderPartidos(content){
 
 function openMatchView(matchId){
   const m = matches.find(x=>x.id===matchId);
+  if(!m){ showToast('Ese partido ya no existe'); return; }
   const {v, n} = matchScore(m);
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
@@ -501,10 +506,10 @@ function openMatchView(matchId){
       <div class="sheet-handle"></div>
       <h2 class="sheet-title">${fmtDate(m.date)}</h2>
       <div class="card">
-        <div class="team-select-header v"><div class="label">🟢 Equipo Verde <span class="team-total">${v}</span></div></div>
+        <div class="team-select-header v"><div class="label">🟢 Equipo Verde</div><div class="team-total">${v}</div></div>
         ${line('verde')}
-        <div class="team-select-header n"><div class="label">🟠 Equipo Naranja <span class="team-total">${n}</span></div></div>
-        ${line('naranja')}      
+        <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="team-total">${n}</div></div>
+        ${line('naranja')}
       </div>
       <button class="btn-ghost btn-block" id="closeViewBtn">Cerrar</button>
     </div>`;
@@ -517,6 +522,7 @@ function openMatchForm(matchId){
   if(players.length < 2){ showToast('Añade al menos 2 jugadores primero'); return; }
   const editing = !!matchId;
   const match = editing ? matches.find(m=>m.id===matchId) : { id: uid(), date: new Date().toISOString().slice(0,10), verde: [], naranja: [] };
+  if(editing && !match){ showToast('Ese partido ya no existe'); return; }
   const work = JSON.parse(JSON.stringify(match));
 
   const overlay = document.createElement('div');
@@ -629,6 +635,10 @@ function renderClasificacion(content){
       </div>
     </div>` : ''}
     <div class="section-title">Clasificación general</div>
+    <div class="row" style="gap:8px; margin-bottom:12px;">
+      <div class="tab ${sortBy==='pts'?'active':''}" id="sortByPts" style="flex:1;">Por puntos</div>
+      <div class="tab ${sortBy==='gf'?'active':''}" id="sortByGf" style="flex:1;">Por goles</div>
+    </div>
     <div id="rankingCapture">
       <div class="rank-title-strip">
         <div class="rt">Clasificación</div>
@@ -660,6 +670,8 @@ function renderClasificacion(content){
       showToast('Configuración actualizada');
     };
   }
+  document.getElementById('sortByPts').onclick = ()=>{ sortBy='pts'; render(); };
+  document.getElementById('sortByGf').onclick = ()=>{ sortBy='gf'; render(); };
   document.getElementById('exportJpgBtn').onclick = ()=> exportRanking('jpg');
   document.getElementById('exportPdfBtn').onclick = ()=> exportRanking('pdf');
 }
