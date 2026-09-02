@@ -163,6 +163,18 @@ let matches = [];
 let config = { pointsPerGoal: 1 };
 let activeTab = 'partidos';
 let sortBy = 'pts'; // 'pts' o 'gf'
+
+// Jugadores invitados: seleccionables en un partido, pero no forman parte
+// de la plantilla ni entran en la clasificación (ids fijos, fuera de Firestore).
+const GUESTS = [
+  { id: 'guest_a', name: 'Invitado_A' },
+  { id: 'guest_b', name: 'Invitado_B' },
+  { id: 'guest_c', name: 'Invitado_C' },
+  { id: 'guest_d', name: 'Invitado_D' },
+];
+function findAnyPlayer(id){
+  return players.find(p=>p.id===id) || GUESTS.find(g=>g.id===id);
+}
 let playersLoaded = false, matchesLoaded = false, configLoaded = false;
 let isAdmin = false;
 
@@ -498,7 +510,7 @@ function openMatchView(matchId){
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
   const line = (team)=> (m[team]||[]).map(x=>{
-    const p = players.find(p=>p.id===x.playerId);
+    const p = findAnyPlayer(x.playerId);
     return `<div class="pick-row"><div class="pname">${escapeHtml(p?p.name:'(jugador eliminado)')}</div><div style="font-weight:700;">${x.goals}</div></div>`;
   }).join('');
   overlay.innerHTML = `
@@ -559,7 +571,7 @@ function openMatchForm(matchId){
   function renderPicker(team, containerId, countId){
     const container = document.getElementById(containerId);
     const otherTeam = team==='verde'?'naranja':'verde';
-    container.innerHTML = players.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
+    container.innerHTML = players.slice().sort((a,b)=>a.name.localeCompare(b.name)).concat(GUESTS).map(p=>{
       const checked = isInTeam(team, p.id);
       const inBoth = isInTeam(otherTeam, p.id);
       return `<div class="pick-row ${checked?'checked':''}">
