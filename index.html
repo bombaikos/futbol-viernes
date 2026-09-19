@@ -549,6 +549,14 @@ function renderJugadores(content){
             </div>` : ''}
           </div>`;
         }).join('')}
+      ${players.length>0 ? (()=>{
+        const total = players.reduce((s,p)=>s+computeBalance(p.id), 0);
+        const priceThreshold = currentPrice!=null ? currentPrice : 0;
+        return `<div class="player-row" style="background:var(--navy-light);border-top:2px solid var(--navy);margin:2px -12px -6px;padding:11px 12px;border-radius:0 0 8px 8px;">
+          <div class="player-name" style="flex:1;font-weight:800;text-transform:uppercase;font-size:12.5px;letter-spacing:0.03em;color:var(--navy);">Saldo total</div>
+          <div style="min-width:64px;text-align:right;font-weight:800;font-size:15px;color:${total<priceThreshold?'var(--danger)':'var(--navy)'};">${total.toFixed(2)}€</div>
+        </div>`;
+      })() : ''}
     </div>
   `;
 
@@ -822,6 +830,10 @@ function renderPagos(content){
   content.innerHTML = `
     <div class="section-title">Precio de la cancha</div>
     <div class="card">
+      <div style="text-align:center;margin-bottom:14px;">
+        <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;">Precio actual</div>
+        <div style="font-size:34px;font-weight:800;color:var(--navy);">${currentCourtPrice()!=null ? currentCourtPrice().toFixed(2)+' €' : '— sin definir —'}</div>
+      </div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Si introduces una fecha que ya existe, sustituye el importe anterior de ese día. Se usa el precio vigente en la fecha de cada partido.</div>
       <div class="row" style="margin-bottom:10px;">
         <input type="date" id="newPriceDate" value="${new Date().toISOString().slice(0,10)}" style="flex:1;">
