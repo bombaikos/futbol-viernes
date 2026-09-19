@@ -59,6 +59,10 @@
     font-family:'DM Sans',sans-serif; border:1.5px solid var(--navy-mid); border-radius:8px; padding:10px 12px; font-size:16px; color:var(--navy); background:#fff; width:100%;
   }
   input:focus{ outline:none; border-color:var(--navy); background:var(--navy-light); }
+  select{
+    font-family:'DM Sans',sans-serif; border:1.5px solid var(--navy-mid); border-radius:8px; padding:10px 12px; font-size:16px; color:var(--navy); background:#fff; width:100%;
+  }
+  select:focus{ outline:none; border-color:var(--navy); }
 
   button{ font-family:'DM Sans',sans-serif; font-weight:700; font-size:14px; border:none; border-radius:8px; padding:12px 16px; cursor:pointer; transition:transform .08s ease, opacity .15s ease; touch-action:manipulation; }
   button:active{ transform:scale(0.97); }
@@ -161,6 +165,8 @@ const db = firebase.firestore();
 let players = [];
 let matches = [];
 let config = { pointsPerGoal: 1 };
+let courtPrices = []; // [{id, date, price}] historial de precios de la cancha
+let payments = []; // [{id, playerId, date, amount}] pagos recibidos
 let activeTab = 'partidos';
 let sortBy = 'pts'; // 'pts' o 'gf'
 
@@ -175,10 +181,10 @@ const GUESTS = [
 function findAnyPlayer(id){
   return players.find(p=>p.id===id) || GUESTS.find(g=>g.id===id);
 }
-let playersLoaded = false, matchesLoaded = false, configLoaded = false;
+let playersLoaded = false, matchesLoaded = false, configLoaded = false, pricesLoaded = false, paymentsLoaded = false;
 let isAdmin = false;
 
-function ready(){ return playersLoaded && matchesLoaded && configLoaded; }
+function ready(){ return playersLoaded && matchesLoaded && configLoaded && pricesLoaded && paymentsLoaded; }
 
 // ---------- Firestore realtime listeners ----------
 db.collection('players').onSnapshot(snap=>{
@@ -198,6 +204,18 @@ db.collection('config').doc('main').onSnapshot(doc=>{
   configLoaded = true;
   render();
 }, err=> showToast('Error leyendo configuración'));
+
+db.collection('courtPrices').onSnapshot(snap=>{
+  courtPrices = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+  pricesLoaded = true;
+  render();
+}, err=> showToast('Error leyendo precios de la cancha'));
+
+db.collection('payments').onSnapshot(snap=>{
+  payments = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+  paymentsLoaded = true;
+  render();
+}, err=> showToast('Error leyendo pagos'));
 
 auth.onAuthStateChanged(user=>{
   isAdmin = !!user;
@@ -223,6 +241,79 @@ async function deleteMatchDoc(id){
 }
 async function saveConfigDoc(cfg){
   await db.collection('config').doc('main').set(cfg);
+}
+async function addCourtPriceDoc(date, price){
+  await db.collection('courtPrices').add({ date, price });
+}
+async function updateCourtPriceDoc(id, date, price){
+  await db.collection('courtPrices').doc(id).update({ date, price });
+}
+async function deleteCourtPriceDoc(id){
+  await db.collection('courtPrices').doc(id).delete();
+}
+// Precio vigente en una fecha dada: el registro más reciente cuya fecha
+// sea anterior o igual a la del partido. Si no hay ninguno, devuelve null.
+function priceAt(dateStr){
+  const applicable = courtPrices.filter(cp => cp.date <= dateStr).sort((a,b)=> b.date.localeCompare(a.date));
+  return applicable.length ? Number(applicable[0].price) : null;
+}
+async function addPaymentDoc(playerId, date, amount, note){
+  await db.collection('payments').add({ playerId, date, amount, note: (note||'').slice(0,125) });
+}
+async function updatePaymentDoc(id, playerId, date, amount, note){
+  await db.collection('payments').doc(id).update({ playerId, date, amount, note: (note||'').slice(0,125) });
+}
+async function deletePaymentDoc(id){
+  await db.collection('payments').doc(id).delete();
+}
+function isGuestId(id){ return GUESTS.some(g=>g.id===id); }
+
+// Historial combinado de un jugador: pagos reales + cargo calculado de cada
+// partido que jugó + fechas en que se llevó los petos. Nada de esto (salvo
+// los pagos) se guarda — se deriva de matches y courtPrices cada vez.
+function buildPlayerHistory(playerId){
+  const entries = [];
+  payments.filter(p=>p.playerId===playerId).forEach(p=>{
+    entries.push({ date:p.date, type:'payment', label: p.note ? `Pago recibido — ${p.note}` : 'Pago recibido', amount:Number(p.amount) });
+  });
+  matches.forEach(m=>{
+    const inVerde = (m.verde||[]).some(x=>x.playerId===playerId);
+    const inNaranja = (m.naranja||[]).some(x=>x.playerId===playerId);
+    if(inVerde || inNaranja){
+      const price = priceAt(m.date);
+      if(price!=null){
+        const allIds = new Set([...(m.verde||[]).map(x=>x.playerId), ...(m.naranja||[]).map(x=>x.playerId)]);
+        const n = allIds.size;
+        if(n>0){
+          const baseShare = price / n;
+          let unsponsoredGuests = 0;
+          allIds.forEach(id=>{
+            if(isGuestId(id)){
+              const eV=(m.verde||[]).find(x=>x.playerId===id), eN=(m.naranja||[]).find(x=>x.playerId===id);
+              const paga = (eV ? eV.paga : undefined) ?? (eN ? eN.paga : undefined) ?? true;
+              if(paga===false) unsponsoredGuests++;
+            }
+          });
+          const plantillaIds = [...allIds].filter(id=>players.some(p=>p.id===id));
+          const extra = plantillaIds.length ? (unsponsoredGuests*baseShare)/plantillaIds.length : 0;
+          entries.push({ date:m.date, type:'charge', label:`Partido (cancha ${price.toFixed(2)}€ ÷ ${n})`, amount:-(baseShare+extra) });
+        }
+      }
+    }
+    if(m.petos===playerId){
+      entries.push({ date:m.date, type:'petos', label:'Se llevó los petos', amount:0 });
+    }
+  });
+  return entries.sort((a,b)=> b.date.localeCompare(a.date));
+}
+function computeBalance(playerId){
+  return buildPlayerHistory(playerId).reduce((s,e)=>s+e.amount, 0);
+}
+function computePetosCount(playerId){
+  return matches.filter(m=>m.petos===playerId).length;
+}
+function currentCourtPrice(){
+  return priceAt(new Date().toISOString().slice(0,10));
 }
 
 function showToast(msg){
@@ -315,7 +406,7 @@ function computeStats(){
     });
   });
   return Object.values(stats).map(s=>({
-    ...s, pts: s.g*3 + s.e*1 + s.gf*(Number(config.pointsPerGoal)||0)
+    ...s, pts: s.g*3 + s.e*1
   })).sort((a,b)=> sortBy==='gf'
     ? (b.gf - a.gf || b.pts - a.pts || a.name.localeCompare(b.name))
     : (b.pts - a.pts || b.gf - a.gf || a.name.localeCompare(b.name))
@@ -354,6 +445,7 @@ function render(){
     app.innerHTML = `<div class="empty" style="padding-top:80px;">Cargando…</div>`;
     return;
   }
+  if(activeTab==='pagos' && !isAdmin) activeTab = 'partidos';
   app.innerHTML = `
     <div class="topbar">
       <div class="auth-corner">
@@ -365,6 +457,7 @@ function render(){
       <div class="tab ${activeTab==='jugadores'?'active':''}" data-tab="jugadores">Jugadores</div>
       <div class="tab ${activeTab==='partidos'?'active':''}" data-tab="partidos">Partidos</div>
       <div class="tab ${activeTab==='clasificacion'?'active':''}" data-tab="clasificacion">Clasificación</div>
+      ${isAdmin ? `<div class="tab ${activeTab==='pagos'?'active':''}" data-tab="pagos">Pagos</div>` : ''}
     </div>
     <div class="content" id="content"></div>
   `;
@@ -374,6 +467,7 @@ function render(){
   const content = document.getElementById('content');
   if(activeTab==='jugadores') renderJugadores(content);
   else if(activeTab==='partidos') renderPartidos(content);
+  else if(activeTab==='pagos') renderPagos(content);
   else renderClasificacion(content);
 }
 
@@ -419,6 +513,8 @@ async function doLogout(){
 
 // ---------- Jugadores tab ----------
 function renderJugadores(content){
+  const currentPrice = currentCourtPrice();
+  const threshold = currentPrice!=null ? currentPrice/10 : 0;
   content.innerHTML = `
     ${isAdmin ? `
     <div class="section-title">Añadir jugador (${players.length}/30)</div>
@@ -432,17 +528,32 @@ function renderJugadores(content){
     <div class="section-title">Plantilla</div>
     <div class="card" id="playerList" style="padding:6px 12px;">
       ${players.length===0 ? '<div class="empty"><div class="big">⚽</div>Aún no hay jugadores.</div>' :
-        players.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`
-          <div class="player-row" data-id="${p.id}">
-            <div class="player-name">${escapeHtml(p.name)}</div>
+        players.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
+          const saldo = computeBalance(p.id);
+          const petosCount = computePetosCount(p.id);
+          const low = saldo < threshold;
+          return `
+          <div class="player-row" data-id="${p.id}" data-open-history style="cursor:pointer;">
+            <div class="player-name" style="flex:1;">${escapeHtml(p.name)}</div>
+            <div style="min-width:64px;text-align:right;font-weight:800;font-size:13.5px;padding:3px 7px;border-radius:6px;${low?'background:var(--danger-soft);color:var(--danger);':'color:var(--navy);'}">${saldo.toFixed(2)}€</div>
+            <div style="width:44px;text-align:center;color:var(--muted);font-size:12.5px;">🎽${petosCount}</div>
             ${isAdmin ? `
-            <div class="row">
+            <div class="row" data-action-group>
               <button class="icon-btn" data-action="edit" data-id="${p.id}">✎</button>
               <button class="icon-btn" data-action="delete" data-id="${p.id}">🗑</button>
             </div>` : ''}
-          </div>`).join('')}
+          </div>`;
+        }).join('')}
     </div>
   `;
+
+  content.querySelectorAll('[data-open-history]').forEach(row=>{
+    row.onclick = (e)=>{
+      if(e.target.closest('[data-action-group]')) return;
+      openPlayerHistory(row.dataset.id);
+    };
+  });
+
   if(!isAdmin) return;
 
   document.getElementById('addPlayerBtn').onclick = async ()=>{
@@ -474,6 +585,40 @@ function renderJugadores(content){
       showToast('Jugador eliminado');
     };
   });
+}
+
+function openPlayerHistory(playerId){
+  const p = players.find(pp=>pp.id===playerId);
+  if(!p) return;
+  const entries = buildPlayerHistory(playerId);
+  const saldo = entries.reduce((s,e)=>s+e.amount,0);
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  const rowsHtml = entries.length===0 ? '<div class="empty"><div class="big">📋</div>Todavía no hay movimientos.</div>' :
+    entries.map(e=>{
+      const icon = e.type==='payment' ? '💶' : e.type==='petos' ? '🎽' : '⚽';
+      const amountHtml = e.type==='petos' ? '' :
+        `<div style="font-weight:800;color:${e.amount<0?'var(--danger)':'var(--navy)'};">${e.amount>=0?'+':''}${e.amount.toFixed(2)}€</div>`;
+      return `<div class="pick-row">
+        <div class="pname">${icon} ${fmtDate(e.date)} — ${escapeHtml(e.label)}</div>
+        ${amountHtml}
+      </div>`;
+    }).join('');
+  overlay.innerHTML = `
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <h2 class="sheet-title">${escapeHtml(p.name)}</h2>
+      <div class="card" style="text-align:center;">
+        <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;">Saldo actual</div>
+        <div style="font-size:32px;font-weight:800;color:${saldo<0?'var(--danger)':'var(--navy)'};">${saldo.toFixed(2)} €</div>
+      </div>
+      <div class="section-title">Historial de movimientos</div>
+      <div class="card">${rowsHtml}</div>
+      <button class="btn-ghost btn-block" id="closeHistoryBtn">Cerrar</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.onclick = e=>{ if(e.target===overlay) overlay.remove(); };
+  document.getElementById('closeHistoryBtn').onclick = ()=> overlay.remove();
 }
 
 // ---------- Partidos tab ----------
@@ -513,6 +658,7 @@ function openMatchView(matchId){
     const p = findAnyPlayer(x.playerId);
     return `<div class="pick-row"><div class="pname">${escapeHtml(p?p.name:'(jugador eliminado)')}</div><div style="font-weight:700;">${x.goals}</div></div>`;
   }).join('');
+  const petosName = m.petos ? (findAnyPlayer(m.petos)?.name || '(jugador eliminado)') : null;
   overlay.innerHTML = `
     <div class="sheet">
       <div class="sheet-handle"></div>
@@ -523,6 +669,7 @@ function openMatchView(matchId){
         <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="team-total">${n}</div></div>
         ${line('naranja')}
       </div>
+      ${petosName ? `<div class="viewer-note">🎽 Petos: ${escapeHtml(petosName)}</div>` : ''}
       <button class="btn-ghost btn-block" id="closeViewBtn">Cerrar</button>
     </div>`;
   document.body.appendChild(overlay);
@@ -554,6 +701,11 @@ function openMatchForm(matchId){
         <div id="pickNaranja"></div>
         <div class="tip-box">💡 Puedes alinear al mismo jugador en los dos equipos si cambia de bando a mitad de partido para equilibrarlo.</div>
       </div>
+      <div class="card">
+        <label style="font-size:12.5px;color:var(--muted);font-weight:600;">¿Quién se lleva los petos?</label>
+        <div style="font-size:12px;color:var(--muted);margin:2px 0 6px;">Solo se puede elegir entre quienes juegan este partido.</div>
+        <select id="petosSelect"><option value="">— Sin asignar —</option></select>
+      </div>
       <div class="form-actions">
         ${editing ? '<button class="btn-danger" id="deleteMatchBtn">Eliminar</button>' : ''}
         <button class="btn-ghost" id="cancelMatchBtn">Cancelar</button>
@@ -568,15 +720,27 @@ function openMatchForm(matchId){
     const sum = work[team].reduce((s,x)=>s+(Number(x.goals)||0),0);
     document.getElementById(totalId).textContent = sum;
   }
+  function renderPetosOptions(){
+    const sel = document.getElementById('petosSelect');
+    const idsInMatch = new Set([...work.verde.map(x=>x.playerId), ...work.naranja.map(x=>x.playerId)]);
+    const candidates = players.filter(p=>idsInMatch.has(p.id)).sort((a,b)=>a.name.localeCompare(b.name));
+    const prevValue = sel.value || work.petos || '';
+    sel.innerHTML = `<option value="">— Sin asignar —</option>` +
+      candidates.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+    sel.value = candidates.some(p=>p.id===prevValue) ? prevValue : '';
+  }
   function renderPicker(team, containerId, countId){
     const container = document.getElementById(containerId);
     const otherTeam = team==='verde'?'naranja':'verde';
     container.innerHTML = players.slice().sort((a,b)=>a.name.localeCompare(b.name)).concat(GUESTS).map(p=>{
       const checked = isInTeam(team, p.id);
       const inBoth = isInTeam(otherTeam, p.id);
+      const entry = work[team].find(x=>x.playerId===p.id);
+      const paga = entry && entry.paga===false ? false : true;
       return `<div class="pick-row ${checked?'checked':''}">
           <input type="checkbox" data-team="${team}" data-id="${p.id}" ${checked?'checked':''}>
           <div class="pname">${escapeHtml(p.name)}${inBoth ? ' <span class="tag">EN AMBOS</span>' : ''}</div>
+          ${checked && isGuestId(p.id) && !(team==='naranja' && inBoth) ? `<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);margin-right:6px;white-space:nowrap;"><input type="checkbox" data-paga-team="${team}" data-paga-id="${p.id}" ${paga?'checked':''}> Paga${inBoth?' (ambos)':''}</label>` : ''}
           ${checked ? `<input type="number" inputmode="numeric" pattern="[0-9]*" class="goals-input" min="0" data-goals-team="${team}" data-goals-id="${p.id}" value="${goalsFor(team,p.id)}" placeholder="0">` : ''}
         </div>`;
     }).join('');
@@ -584,11 +748,25 @@ function openMatchForm(matchId){
     document.getElementById(countId).classList.toggle('warn', work[team].length>0 && work[team].length<5);
     updateTotal('verde','totalVerde');
     updateTotal('naranja','totalNaranja');
-    container.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    renderPetosOptions();
+    container.querySelectorAll('input[type=checkbox][data-team]').forEach(cb=>{
       cb.onchange = ()=>{
         const id = cb.dataset.id;
-        if(cb.checked) work[team].push({ playerId:id, goals:'' });
+        if(cb.checked) work[team].push(isGuestId(id) ? { playerId:id, goals:'', paga:true } : { playerId:id, goals:'' });
         else work[team] = work[team].filter(x=>x.playerId!==id);
+        renderPicker('verde','pickVerde','countVerde');
+        renderPicker('naranja','pickNaranja','countNaranja');
+      };
+    });
+    container.querySelectorAll('input[data-paga-id]').forEach(pc=>{
+      pc.onchange = ()=>{
+        const id = pc.dataset.pagaId, val = pc.checked;
+        // Si el invitado juega en ambos equipos, mantenemos un único
+        // estado de "paga", sincronizado entre las dos listas.
+        ['verde','naranja'].forEach(tm=>{
+          const entry = work[tm].find(x=>x.playerId===id);
+          if(entry) entry.paga = val;
+        });
         renderPicker('verde','pickVerde','countVerde');
         renderPicker('naranja','pickNaranja','countNaranja');
       };
@@ -623,12 +801,83 @@ function openMatchForm(matchId){
     if(!work.date){ showToast('Indica una fecha'); return; }
     if(work.verde.length < 5 || work.verde.length > 6){ showToast('El equipo Verde necesita 5 o 6 jugadores'); return; }
     if(work.naranja.length < 5 || work.naranja.length > 6){ showToast('El equipo Naranja necesita 5 o 6 jugadores'); return; }
-    work.verde = work.verde.map(x=>({ playerId:x.playerId, goals: Number(x.goals)||0 }));
-    work.naranja = work.naranja.map(x=>({ playerId:x.playerId, goals: Number(x.goals)||0 }));
+    work.verde = work.verde.map(x=>({ playerId:x.playerId, goals: Number(x.goals)||0, ...(isGuestId(x.playerId) ? {paga: x.paga!==false} : {}) }));
+    work.naranja = work.naranja.map(x=>({ playerId:x.playerId, goals: Number(x.goals)||0, ...(isGuestId(x.playerId) ? {paga: x.paga!==false} : {}) }));
+    work.petos = document.getElementById('petosSelect').value || null;
     await saveMatchDoc(work);
     overlay.remove();
     showToast(editing?'Partido actualizado':'Partido guardado');
   };
+}
+
+// ---------- Clasificación tab ----------
+// ---------- Pagos tab (solo admin) ----------
+function renderPagos(content){
+  const sorted = payments.slice().sort((a,b)=> b.date.localeCompare(a.date));
+  content.innerHTML = `
+    <div class="section-title">Añadir pago</div>
+    <div class="card">
+      <div class="row" style="flex-wrap:wrap;gap:10px;">
+        <input type="date" id="newPaymentDate" value="${new Date().toISOString().slice(0,10)}" style="flex:1;min-width:130px;">
+        <select id="newPaymentPlayer" style="flex:1;min-width:130px;">
+          ${players.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}
+        </select>
+        <input type="number" id="newPaymentAmount" step="0.5" placeholder="€ (puede ser negativo)" style="flex:1;min-width:130px;">
+      </div>
+      <input type="text" id="newPaymentNote" placeholder="Comentario (opcional)" maxlength="125" style="margin-top:10px;">
+      <button class="btn-primary btn-block" id="addPaymentBtn" style="margin-top:10px;">Añadir pago</button>
+    </div>
+    <div class="section-title">Pagos registrados</div>
+    <div class="card" style="padding:6px 12px;">
+      ${sorted.length===0 ? '<div class="empty"><div class="big">💶</div>Aún no hay pagos registrados.</div>' :
+        sorted.map(p=>{
+          const player = findAnyPlayer(p.playerId);
+          const amt = Number(p.amount);
+          return `
+          <div class="player-row" data-id="${p.id}">
+            <div style="flex:1;">
+              <div class="player-name">${fmtDate(p.date)} — ${escapeHtml(player?player.name:'(jugador eliminado)')} — <span style="font-weight:800;color:${amt<0?'var(--danger)':'var(--navy)'};">${amt>=0?'+':''}${amt.toFixed(2)} €</span></div>
+              ${p.note ? `<div style="font-size:12px;color:var(--muted);margin-top:2px;">${escapeHtml(p.note)}</div>` : ''}
+            </div>
+            <div class="row">
+              <button class="icon-btn" data-payment-action="edit" data-id="${p.id}">✎</button>
+              <button class="icon-btn" data-payment-action="delete" data-id="${p.id}">🗑</button>
+            </div>
+          </div>`;
+        }).join('')}
+    </div>
+  `;
+  document.getElementById('addPaymentBtn').onclick = async ()=>{
+    const date = document.getElementById('newPaymentDate').value;
+    const playerId = document.getElementById('newPaymentPlayer').value;
+    const amount = Number(document.getElementById('newPaymentAmount').value);
+    const note = document.getElementById('newPaymentNote').value.trim();
+    if(!date || !playerId || !amount){ showToast('Rellena fecha, jugador e importe'); return; }
+    await addPaymentDoc(playerId, date, amount, note);
+    showToast('Pago añadido');
+  };
+  content.querySelectorAll('[data-payment-action="edit"]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = btn.dataset.id;
+      const p = payments.find(x=>x.id===id);
+      const newVal = await askText('Nuevo importe (€) — puede ser negativo', String(p.amount));
+      if(newVal===null) return;
+      const num = Number(newVal);
+      if(isNaN(num) || num===0){ showToast('Importe no válido'); return; }
+      const newNote = await askText('Comentario (opcional, máx. 125 caracteres)', p.note||'');
+      const note = newNote===null ? (p.note||'') : newNote.slice(0,125);
+      await updatePaymentDoc(id, p.playerId, p.date, num, note);
+      showToast('Pago actualizado');
+    };
+  });
+  content.querySelectorAll('[data-payment-action="delete"]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const ok = await askConfirm('¿Eliminar este pago?', true);
+      if(!ok) return;
+      await deletePaymentDoc(btn.dataset.id);
+      showToast('Pago eliminado');
+    };
+  });
 }
 
 // ---------- Clasificación tab ----------
@@ -638,13 +887,22 @@ function renderClasificacion(content){
     ${isAdmin ? `
     <div class="section-title">Configuración</div>
     <div class="card">
-      <div class="config-row">
-        <div>
-          <div style="font-weight:600;font-size:14.5px;">Puntos por gol marcado</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px;">Victoria = 3 pts · Empate = 1 pt</div>
-        </div>
-        <input type="number" id="pointsPerGoal" min="0" step="0.5" value="${config.pointsPerGoal}">
+      <div style="font-weight:600;font-size:14.5px;margin-bottom:2px;">Precio de la cancha</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Añade un registro solo cuando el precio cambie. Se usa el vigente en la fecha de cada partido.</div>
+      <div class="row" style="margin-bottom:10px;">
+        <input type="date" id="newPriceDate" value="${new Date().toISOString().slice(0,10)}" style="flex:1;">
+        <input type="number" id="newPriceAmount" min="0" step="0.5" placeholder="€" style="width:90px;">
+        <button class="btn-primary btn-sm" id="addPriceBtn">Añadir</button>
       </div>
+      ${courtPrices.length===0 ? '<div style="font-size:13px;color:var(--muted);">Aún no hay ningún precio registrado.</div>' :
+        courtPrices.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(cp=>`
+          <div class="player-row" data-id="${cp.id}">
+            <div class="player-name">${fmtDate(cp.date)} — ${Number(cp.price).toFixed(2)} €</div>
+            <div class="row">
+              <button class="icon-btn" data-price-action="edit" data-id="${cp.id}">✎</button>
+              <button class="icon-btn" data-price-action="delete" data-id="${cp.id}">🗑</button>
+            </div>
+          </div>`).join('')}
     </div>` : ''}
     <div class="section-title">Clasificación general</div>
     <div class="row" style="gap:8px; margin-bottom:12px;">
@@ -676,11 +934,33 @@ function renderClasificacion(content){
     </div>
   `;
   if(isAdmin){
-    document.getElementById('pointsPerGoal').onchange = async (e)=>{
-      config.pointsPerGoal = Number(e.target.value)||0;
-      await saveConfigDoc(config);
-      showToast('Configuración actualizada');
+    document.getElementById('addPriceBtn').onclick = async ()=>{
+      const date = document.getElementById('newPriceDate').value;
+      const price = Number(document.getElementById('newPriceAmount').value);
+      if(!date || !price){ showToast('Indica fecha e importe'); return; }
+      await addCourtPriceDoc(date, price);
+      showToast('Precio añadido');
     };
+    content.querySelectorAll('[data-price-action="edit"]').forEach(btn=>{
+      btn.onclick = async ()=>{
+        const id = btn.dataset.id;
+        const cp = courtPrices.find(c=>c.id===id);
+        const newVal = await askText('Nuevo importe (€) — fecha ' + fmtDate(cp.date), String(cp.price));
+        if(newVal===null) return;
+        const num = Number(newVal);
+        if(!num){ showToast('Importe no válido'); return; }
+        await updateCourtPriceDoc(id, cp.date, num);
+        showToast('Precio actualizado');
+      };
+    });
+    content.querySelectorAll('[data-price-action="delete"]').forEach(btn=>{
+      btn.onclick = async ()=>{
+        const ok = await askConfirm('¿Eliminar este registro de precio?', true);
+        if(!ok) return;
+        await deleteCourtPriceDoc(btn.dataset.id);
+        showToast('Precio eliminado');
+      };
+    });
   }
   document.getElementById('sortByPts').onclick = ()=>{ sortBy='pts'; render(); };
   document.getElementById('sortByGf').onclick = ()=>{ sortBy='gf'; render(); };
