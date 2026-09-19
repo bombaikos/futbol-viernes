@@ -437,6 +437,11 @@ function todayDDMMYYYY(){
   return `${dd}.${mm}.${d.getFullYear()}`;
 }
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Acepta tanto coma como punto como separador decimal al escribir importes.
+function parseMoney(str){
+  if(str==null) return NaN;
+  return Number(String(str).trim().replace(',', '.'));
+}
 
 // ---------- Render root ----------
 function render(){
@@ -815,6 +820,24 @@ function openMatchForm(matchId){
 function renderPagos(content){
   const sorted = payments.slice().sort((a,b)=> b.date.localeCompare(a.date));
   content.innerHTML = `
+    <div class="section-title">Precio de la cancha</div>
+    <div class="card">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Si introduces una fecha que ya existe, sustituye el importe anterior de ese día. Se usa el precio vigente en la fecha de cada partido.</div>
+      <div class="row" style="margin-bottom:10px;">
+        <input type="date" id="newPriceDate" value="${new Date().toISOString().slice(0,10)}" style="flex:1;">
+        <input type="text" inputmode="decimal" id="newPriceAmount" placeholder="€ (ej. 45 o 45,50)" style="width:130px;">
+        <button class="btn-primary btn-sm" id="addPriceBtn">Añadir</button>
+      </div>
+      ${courtPrices.length===0 ? '<div style="font-size:13px;color:var(--muted);">Aún no hay ningún precio registrado.</div>' :
+        courtPrices.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(cp=>`
+          <div class="player-row" data-id="${cp.id}">
+            <div class="player-name">${fmtDate(cp.date)} — ${Number(cp.price).toFixed(2)} €</div>
+            <div class="row">
+              <button class="icon-btn" data-price-action="edit" data-id="${cp.id}">✎</button>
+              <button class="icon-btn" data-price-action="delete" data-id="${cp.id}">🗑</button>
+            </div>
+          </div>`).join('')}
+    </div>
     <div class="section-title">Añadir pago</div>
     <div class="card">
       <div class="row" style="flex-wrap:wrap;gap:10px;">
@@ -822,7 +845,7 @@ function renderPagos(content){
         <select id="newPaymentPlayer" style="flex:1;min-width:130px;">
           ${players.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}
         </select>
-        <input type="number" id="newPaymentAmount" step="0.5" placeholder="€ (puede ser negativo)" style="flex:1;min-width:130px;">
+        <input type="text" inputmode="decimal" id="newPaymentAmount" placeholder="€ (puede ser negativo, ej. -12,50)" style="flex:1;min-width:130px;">
       </div>
       <input type="text" id="newPaymentNote" placeholder="Comentario (opcional)" maxlength="125" style="margin-top:10px;">
       <button class="btn-primary btn-block" id="addPaymentBtn" style="margin-top:10px;">Añadir pago</button>
@@ -847,10 +870,43 @@ function renderPagos(content){
         }).join('')}
     </div>
   `;
+  document.getElementById('addPriceBtn').onclick = async ()=>{
+    const date = document.getElementById('newPriceDate').value;
+    const price = parseMoney(document.getElementById('newPriceAmount').value);
+    if(!date || !price){ showToast('Indica fecha e importe'); return; }
+    const existing = courtPrices.find(cp=>cp.date===date);
+    if(existing){
+      await updateCourtPriceDoc(existing.id, date, price);
+      showToast('Precio de esa fecha sustituido');
+    } else {
+      await addCourtPriceDoc(date, price);
+      showToast('Precio añadido');
+    }
+  };
+  content.querySelectorAll('[data-price-action="edit"]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = btn.dataset.id;
+      const cp = courtPrices.find(c=>c.id===id);
+      const newVal = await askText('Nuevo importe (€) — fecha ' + fmtDate(cp.date), String(cp.price));
+      if(newVal===null) return;
+      const num = parseMoney(newVal);
+      if(!num){ showToast('Importe no válido'); return; }
+      await updateCourtPriceDoc(id, cp.date, num);
+      showToast('Precio actualizado');
+    };
+  });
+  content.querySelectorAll('[data-price-action="delete"]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const ok = await askConfirm('¿Eliminar este registro de precio?', true);
+      if(!ok) return;
+      await deleteCourtPriceDoc(btn.dataset.id);
+      showToast('Precio eliminado');
+    };
+  });
   document.getElementById('addPaymentBtn').onclick = async ()=>{
     const date = document.getElementById('newPaymentDate').value;
     const playerId = document.getElementById('newPaymentPlayer').value;
-    const amount = Number(document.getElementById('newPaymentAmount').value);
+    const amount = parseMoney(document.getElementById('newPaymentAmount').value);
     const note = document.getElementById('newPaymentNote').value.trim();
     if(!date || !playerId || !amount){ showToast('Rellena fecha, jugador e importe'); return; }
     await addPaymentDoc(playerId, date, amount, note);
@@ -862,7 +918,7 @@ function renderPagos(content){
       const p = payments.find(x=>x.id===id);
       const newVal = await askText('Nuevo importe (€) — puede ser negativo', String(p.amount));
       if(newVal===null) return;
-      const num = Number(newVal);
+      const num = parseMoney(newVal);
       if(isNaN(num) || num===0){ showToast('Importe no válido'); return; }
       const newNote = await askText('Comentario (opcional, máx. 125 caracteres)', p.note||'');
       const note = newNote===null ? (p.note||'') : newNote.slice(0,125);
@@ -884,26 +940,6 @@ function renderPagos(content){
 function renderClasificacion(content){
   const stats = computeStats();
   content.innerHTML = `
-    ${isAdmin ? `
-    <div class="section-title">Configuración</div>
-    <div class="card">
-      <div style="font-weight:600;font-size:14.5px;margin-bottom:2px;">Precio de la cancha</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Añade un registro solo cuando el precio cambie. Se usa el vigente en la fecha de cada partido.</div>
-      <div class="row" style="margin-bottom:10px;">
-        <input type="date" id="newPriceDate" value="${new Date().toISOString().slice(0,10)}" style="flex:1;">
-        <input type="number" id="newPriceAmount" min="0" step="0.5" placeholder="€" style="width:90px;">
-        <button class="btn-primary btn-sm" id="addPriceBtn">Añadir</button>
-      </div>
-      ${courtPrices.length===0 ? '<div style="font-size:13px;color:var(--muted);">Aún no hay ningún precio registrado.</div>' :
-        courtPrices.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(cp=>`
-          <div class="player-row" data-id="${cp.id}">
-            <div class="player-name">${fmtDate(cp.date)} — ${Number(cp.price).toFixed(2)} €</div>
-            <div class="row">
-              <button class="icon-btn" data-price-action="edit" data-id="${cp.id}">✎</button>
-              <button class="icon-btn" data-price-action="delete" data-id="${cp.id}">🗑</button>
-            </div>
-          </div>`).join('')}
-    </div>` : ''}
     <div class="section-title">Clasificación general</div>
     <div class="row" style="gap:8px; margin-bottom:12px;">
       <div class="tab ${sortBy==='pts'?'active':''}" id="sortByPts" style="flex:1;">Por puntos</div>
@@ -933,35 +969,6 @@ function renderClasificacion(content){
       <button class="btn-primary" id="exportPdfBtn" style="flex:1;">Exportar PDF</button>
     </div>
   `;
-  if(isAdmin){
-    document.getElementById('addPriceBtn').onclick = async ()=>{
-      const date = document.getElementById('newPriceDate').value;
-      const price = Number(document.getElementById('newPriceAmount').value);
-      if(!date || !price){ showToast('Indica fecha e importe'); return; }
-      await addCourtPriceDoc(date, price);
-      showToast('Precio añadido');
-    };
-    content.querySelectorAll('[data-price-action="edit"]').forEach(btn=>{
-      btn.onclick = async ()=>{
-        const id = btn.dataset.id;
-        const cp = courtPrices.find(c=>c.id===id);
-        const newVal = await askText('Nuevo importe (€) — fecha ' + fmtDate(cp.date), String(cp.price));
-        if(newVal===null) return;
-        const num = Number(newVal);
-        if(!num){ showToast('Importe no válido'); return; }
-        await updateCourtPriceDoc(id, cp.date, num);
-        showToast('Precio actualizado');
-      };
-    });
-    content.querySelectorAll('[data-price-action="delete"]').forEach(btn=>{
-      btn.onclick = async ()=>{
-        const ok = await askConfirm('¿Eliminar este registro de precio?', true);
-        if(!ok) return;
-        await deleteCourtPriceDoc(btn.dataset.id);
-        showToast('Precio eliminado');
-      };
-    });
-  }
   document.getElementById('sortByPts').onclick = ()=>{ sortBy='pts'; render(); };
   document.getElementById('sortByGf').onclick = ()=>{ sortBy='gf'; render(); };
   document.getElementById('exportJpgBtn').onclick = ()=> exportRanking('jpg');
