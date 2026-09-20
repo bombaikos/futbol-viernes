@@ -58,6 +58,7 @@
   input[type=text], input[type=number], input[type=date], input[type=email], input[type=password]{
     font-family:'DM Sans',sans-serif; border:1.5px solid var(--navy-mid); border-radius:8px; padding:10px 12px; font-size:16px; color:var(--navy); background:#fff; width:100%;
   }
+  input[type=date]{ min-width:0; -webkit-min-logical-width:0; }
   input:focus{ outline:none; border-color:var(--navy); background:var(--navy-light); }
   select{
     font-family:'DM Sans',sans-serif; border:1.5px solid var(--navy-mid); border-radius:8px; padding:10px 12px; font-size:16px; color:var(--navy); background:#fff; width:100%;
@@ -591,7 +592,11 @@ function renderJugadores(content){
     btn.onclick = async ()=>{
       const id = btn.dataset.id;
       const usedInMatch = matches.some(m=> (m.verde||[]).some(x=>x.playerId===id) || (m.naranja||[]).some(x=>x.playerId===id));
-      const msg = usedInMatch ? 'Este jugador tiene partidos registrados. Si lo eliminas, seguirá apareciendo como "(jugador eliminado)" en el historial. ¿Eliminar de todos modos?' : '¿Eliminar este jugador?';
+      const saldo = computeBalance(id);
+      const avisos = [];
+      if(usedInMatch) avisos.push('seguirá apareciendo como "(jugador eliminado)" en el historial de esos partidos');
+      if(Math.abs(saldo) > 0.005) avisos.push(`su saldo actual (${saldo.toFixed(2)}€) dejará de sumarse al saldo total y no podrás volver a consultar su historial`);
+      const msg = avisos.length ? `Si lo eliminas: ${avisos.join('; ')}. ¿Eliminar de todos modos?` : '¿Eliminar este jugador?';
       const ok = await askConfirm(msg, true);
       if(!ok) return;
       await deletePlayerDoc(id);
