@@ -18,6 +18,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-analytics-compat.js"></script>
 
 <style>
   :root{
@@ -58,7 +59,7 @@
   input[type=text], input[type=number], input[type=date], input[type=email], input[type=password]{
     font-family:'DM Sans',sans-serif; border:1.5px solid var(--navy-mid); border-radius:8px; padding:10px 12px; font-size:16px; color:var(--navy); background:#fff; width:100%;
   }
-  input[type=date]{ min-width:0; -webkit-min-logical-width:0; }
+  input[type=date]{ min-width:0; -webkit-min-logical-width:0; -webkit-appearance:none; appearance:none; box-sizing:border-box; }
   input:focus{ outline:none; border-color:var(--navy); background:var(--navy-light); }
   select{
     font-family:'DM Sans',sans-serif; border:1.5px solid var(--navy-mid); border-radius:8px; padding:10px 12px; font-size:16px; color:var(--navy); background:#fff; width:100%;
@@ -161,13 +162,16 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
+// Analytics: solo mide volumen de uso (sesiones, dispositivo, país aproximado).
+// No identifica a personas — la app nunca llama a setUserId ni a logEvent.
+try{ firebase.analytics(); }catch(e){ /* si el navegador bloquea analytics, no pasa nada */ }
 
 // ---------- State ----------
 let players = [];
 let matches = [];
 let config = { pointsPerGoal: 1 };
 let courtPrices = []; // [{id, date, price}] historial de precios de la cancha
-let payments = []; // [{id, playerId, date, amount}] pagos recibidos
+let payments = []; // [{id, playerId, date, amount, note}] pagos recibidos
 let activeTab = 'partidos';
 let sortBy = 'pts'; // 'pts' o 'gf'
 
@@ -710,7 +714,7 @@ function openMatchForm(matchId){
       <h2 class="sheet-title">${editing?'Editar partido':'Nuevo partido'}</h2>
       <div class="card">
         <label style="font-size:12.5px;color:var(--muted);font-weight:600;">Fecha del partido</label>
-        <div style="margin-top:6px;"><input type="date" id="matchDate" value="${work.date}"></div>
+        <div style="margin-top:6px;overflow:hidden;border-radius:8px;"><input type="date" id="matchDate" value="${work.date}"></div>
       </div>
       <div class="card">
         <div class="team-select-header v"><div class="label">🟢 Equipo Verde</div><div class="row" style="gap:10px;"><div class="team-total" id="totalVerde">0</div><div class="team-count" id="countVerde">0/6</div></div></div>
