@@ -22,8 +22,7 @@
 
 <style>
   :root{
-    --navy: #0B1220; 
-    --subnavy: #243B69;
+    --navy: #0B1220;
     --navy-light: #EDF1FA;
     --navy-mid: #C9D3E8;
     --white: #FFFFFF;
@@ -186,6 +185,11 @@ const GUESTS = [
 ];
 function findAnyPlayer(id){
   return players.find(p=>p.id===id) || GUESTS.find(g=>g.id===id);
+}
+// Icono de peto dibujado en SVG (en vez de emoji) para que se vea igual en
+// cualquier dispositivo. color se pasa para adaptarlo al contexto (gris o navy).
+function petosIcon(color){
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;flex-shrink:0;"><path d="M9 3.5L12 5.5L15 3.5L18.5 6V9.5L16.5 8.8V19.5C16.5 20.3 15.8 21 15 21H9C8.2 21 7.5 20.3 7.5 19.5V8.8L5.5 9.5V6L9 3.5Z" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" fill="none"/></svg>`;
 }
 let playersLoaded = false, matchesLoaded = false, configLoaded = false, pricesLoaded = false, paymentsLoaded = false;
 let isAdmin = false;
@@ -547,7 +551,7 @@ function renderJugadores(content){
           <div class="player-row" data-id="${p.id}" data-open-history style="cursor:pointer;">
             <div class="player-name" style="flex:1;">${escapeHtml(p.name)}</div>
             <div style="min-width:64px;text-align:right;font-weight:800;font-size:13.5px;padding:3px 7px;border-radius:6px;${low?'background:var(--danger-soft);color:var(--danger);':'color:var(--navy);'}">${saldo.toFixed(2)}€</div>
-            <div style="width:44px;text-align:center;color:var(--muted);font-size:12.5px;">🎽${petosCount}</div>
+            <div style="width:52px;display:flex;align-items:center;justify-content:center;gap:4px;">${petosIcon('#6B7383')}<span class="pos">${petosCount}</span></div>
             ${isAdmin ? `
             <div class="row" data-action-group>
               <button class="icon-btn" data-action="edit" data-id="${p.id}">✎</button>
@@ -619,7 +623,7 @@ function openPlayerHistory(playerId){
   overlay.className = 'overlay';
   const rowsHtml = entries.length===0 ? '<div class="empty"><div class="big">📋</div>Todavía no hay movimientos.</div>' :
     entries.map(e=>{
-      const icon = e.type==='payment' ? '💶' : e.type==='petos' ? '🎽' : '⚽';
+      const icon = e.type==='payment' ? '💶' : e.type==='petos' ? petosIcon('#6B7383') : '⚽';
       const amountHtml = e.type==='petos' ? '' :
         `<div style="font-weight:800;color:${e.amount<0?'var(--danger)':'var(--navy)'};">${e.amount>=0?'+':''}${e.amount.toFixed(2)}€</div>`;
       return `<div class="pick-row">
@@ -692,7 +696,7 @@ function openMatchView(matchId){
         <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="team-total">${n}</div></div>
         ${line('naranja')}
       </div>
-      ${petosName ? `<div class="viewer-note">🎽 Petos: ${escapeHtml(petosName)}</div>` : ''}
+      ${petosName ? `<div class="viewer-note">${petosIcon('var(--navy)')} Petos: ${escapeHtml(petosName)}</div>` : ''}
       <button class="btn-ghost btn-block" id="closeViewBtn">Cerrar</button>
     </div>`;
   document.body.appendChild(overlay);
