@@ -22,7 +22,8 @@
 
 <style>
   :root{
-    --navy: #243B69; //#0B1220
+    --navy: #0B1220; 
+    --subnavy: #243B69;
     --navy-light: #EDF1FA;
     --navy-mid: #C9D3E8;
     --white: #FFFFFF;
@@ -116,9 +117,9 @@
   .form-actions button{ flex:1; }
 
   #rankingCapture{ background:var(--white); border-radius:10px; overflow:hidden; border:1.5px solid var(--navy-mid); }
-  .rank-title-strip{ background:var(--navy); color:#fff; padding:14px 16px; }
+  .rank-title-strip{ background:#fff; color:var(--navy); border-bottom:1.5px solid var(--navy-mid); padding:14px 16px; }
   .rank-title-strip .rt{ font-size:24px; margin:0; }
-  .rank-title-strip .rs{ font-size:12px; opacity:0.75; margin-top:2px;}
+  .rank-title-strip .rs{ font-size:12px; color:var(--muted); margin-top:2px;}
   table.rank{ width:100%; border-collapse:collapse; font-size:13px; }
   table.rank th{ text-align:center; padding:9px 4px; font-size:10.5px; text-transform:uppercase; letter-spacing:0.03em; color:var(--muted); border-bottom:2px solid var(--navy-mid); font-weight:700; }
   table.rank th.left, table.rank td.left{ text-align:left; padding-left:12px; }
