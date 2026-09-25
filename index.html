@@ -7,12 +7,13 @@
 <link rel="apple-touch-icon" href="icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Fútbol Viernes">   <div class="section-title">Exportar datos</div>
+<meta name="apple-mobile-web-app-title" content="Fútbol Viernes">
 <meta name="theme-color" content="#0B1220">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 
 <!-- Firebase (compat SDK, sin build tools) -->
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
@@ -324,6 +325,54 @@ function computePetosCount(playerId){
 }
 function currentCourtPrice(){
   return priceAt(new Date().toISOString().slice(0,10));
+}
+
+// ---------- Progresión temporal (solo admin) ----------
+function leagueTimeline(){
+  return [...new Set(matches.map(m=>m.date))].sort();
+}
+function playerCumulativeSeries(playerId){
+  const timeline = leagueTimeline();
+  let accGoals = 0, accPoints = 0;
+  const goalsSeries = [], pointsSeries = [];
+  timeline.forEach(date=>{
+    const m = matches.find(x=>x.date===date);
+    if(!m){ goalsSeries.push(accGoals); pointsSeries.push(accPoints); return; }
+    const inVerde = (m.verde||[]).some(x=>x.playerId===playerId);
+    const inNaranja = (m.naranja||[]).some(x=>x.playerId===playerId);
+    if(inVerde || inNaranja){
+      let g = 0;
+      (m.verde||[]).forEach(x=>{ if(x.playerId===playerId) g += Number(x.goals)||0; });
+      (m.naranja||[]).forEach(x=>{ if(x.playerId===playerId) g += Number(x.goals)||0; });
+      accGoals += g;
+      const { v, n, vRes, nRes } = calculaResultado(m);
+      const res = (inVerde && inNaranja) ? (v===n?'e':'g') : (inVerde ? vRes : nRes);
+      accPoints += res==='g'?3 : res==='e'?1 : 0;
+    }
+    goalsSeries.push(accGoals);
+    pointsSeries.push(accPoints);
+  });
+  return { timeline, goalsSeries, pointsSeries };
+}
+function leagueAverageSeries(){
+  const timeline = leagueTimeline();
+  const active = players.filter(p =>
+    matches.some(m => (m.verde||[]).some(x=>x.playerId===p.id) || (m.naranja||[]).some(x=>x.playerId===p.id))
+  );
+  if(active.length===0) return { timeline, avgGoals: timeline.map(()=>0), avgPoints: timeline.map(()=>0) };
+  const allSeries = active.map(p => playerCumulativeSeries(p.id));
+  const avgGoals = timeline.map((_,i)=> allSeries.reduce((s,ser)=>s+ser.goalsSeries[i],0) / active.length);
+  const avgPoints = timeline.map((_,i)=> allSeries.reduce((s,ser)=>s+ser.pointsSeries[i],0) / active.length);
+  return { timeline, avgGoals, avgPoints };
+}
+function verdeVsNaranja(){
+  let vWins=0, nWins=0, draws=0, vGoals=0, nGoals=0;
+  matches.forEach(m=>{
+    const { v, n, vRes } = calculaResultado(m);
+    vGoals += v; nGoals += n;
+    if(vRes==='g') vWins++; else if(vRes==='p') nWins++; else draws++;
+  });
+  return { vWins, nWins, draws, vGoals, nGoals, total: matches.length };
 }
 
 function showToast(msg){
@@ -842,7 +891,7 @@ function openMatchForm(matchId){
 function renderPagos(content){
   const sorted = payments.slice().sort((a,b)=> b.date.localeCompare(a.date));
   content.innerHTML = `
-   <div class="section-title">Precio de la cancha</div>
+    <div class="section-title">Precio de la cancha</div>
     <div class="card">
       <div style="text-align:center;margin-bottom:14px;">
         <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;">Precio actual</div>
@@ -895,7 +944,7 @@ function renderPagos(content){
           </div>`;
         }).join('')}
     </div>
-   <div class="section-title">Exportar datos</div>
+    <div class="section-title">Exportar datos</div>
     <div class="card">
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Descarga un archivo .json con jugadores, partidos (con sus petos), precios de la cancha y pagos — útil para hacer pruebas con los datos reales sin tocar la app en vivo.</div>
       <button class="btn-gold btn-block" id="exportDataBtn">Exportar datos (JSON)</button>
@@ -1000,7 +1049,7 @@ function renderClasificacion(content){
         <thead><tr><th></th><th class="left">Jugador</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>GF</th><th>Pts</th></tr></thead>
         <tbody>
           ${stats.map((s,i)=>`
-            <tr>
+            <tr ${isAdmin?`data-stats-row data-id="${s.id}" style="cursor:pointer;"`:''}>
               <td><span class="pos ${i===0?'g1':i===1?'g2':i===2?'g3':''}">${i+1}</span></td>
               <td class="left">${escapeHtml(s.name)}</td>
               <td>${s.pj}</td><td>${s.g}</td><td>${s.e}</td><td>${s.p}</td><td class="gf">${s.gf}</td>
@@ -1009,15 +1058,133 @@ function renderClasificacion(content){
         </tbody>
       </table>`}
     </div>
+    ${isAdmin ? (()=>{ const vn = verdeVsNaranja();
+      if(vn.total===0) return '';
+      const vPts = vn.vWins*3 + vn.draws*1;
+      const nPts = vn.nWins*3 + vn.draws*1;
+      return `
+      <div class="section-title" style="margin-top:26px;">Verde vs Naranja</div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table class="rank">
+          <thead><tr><th class="left">Equipo</th><th>Victorias</th><th>Puntos</th><th>Goles</th></tr></thead>
+          <tbody>
+            <tr><td class="left">🟢 Verde</td><td>${vn.vWins}</td><td class="pts">${vPts}</td><td class="gf">${vn.vGoals}</td></tr>
+            <tr><td class="left">🟠 Naranja</td><td>${vn.nWins}</td><td class="pts">${nPts}</td><td class="gf">${vn.nGoals}</td></tr>
+          </tbody>
+        </table>
+      </div>`;
+    })() : ''}
     <div class="export-bar">
       <button class="btn-gold" id="exportJpgBtn" style="flex:1;">Exportar JPG</button>
-      <button class="btn-primary" id="exportPdfBtn" style="flex:1;">Exportar PDF</button>
+      <button class="btn-gold" id="exportPdfBtn" style="flex:1;">Exportar PDF</button>
     </div>
   `;
   document.getElementById('sortByPts').onclick = ()=>{ sortBy='pts'; render(); };
   document.getElementById('sortByGf').onclick = ()=>{ sortBy='gf'; render(); };
   document.getElementById('exportJpgBtn').onclick = ()=> exportRanking('jpg');
   document.getElementById('exportPdfBtn').onclick = ()=> exportRanking('pdf');
+  if(isAdmin){
+    content.querySelectorAll('[data-stats-row]').forEach(row=>{
+      row.onclick = ()=> openPlayerStats(row.dataset.id);
+    });
+  }
+}
+
+function openPlayerStats(playerId){
+  const p = players.find(pp=>pp.id===playerId);
+  if(!p) return;
+  const stats = computeStats().find(s=>s.id===playerId);
+  const pj = stats ? stats.pj : 0;
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  if(pj===0){
+    overlay.innerHTML = `
+      <div class="sheet">
+        <div class="sheet-handle"></div>
+        <h2 class="sheet-title">${escapeHtml(p.name)}</h2>
+        <div class="viewer-note">Todavía no ha jugado ningún partido — sin datos para las gráficas.</div>
+        <button class="btn-ghost btn-block" id="closeStatsBtn">Cerrar</button>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.onclick = e=>{ if(e.target===overlay) overlay.remove(); };
+    document.getElementById('closeStatsBtn').onclick = ()=> overlay.remove();
+    return;
+  }
+  const efGoles = stats.gf/pj;
+  const efPuntos = stats.pts/pj;
+  const { timeline, goalsSeries, pointsSeries } = playerCumulativeSeries(playerId);
+  const { avgGoals: refGoals, avgPoints: refPoints } = leagueAverageSeries();
+  const labels = timeline.map(d=>{
+    const dt = new Date(d+'T00:00:00');
+    return dt.toLocaleDateString('es-ES', { day:'2-digit', month:'2-digit' });
+  });
+  let vCount=0, nCount=0;
+  matches.forEach(m=>{
+    if((m.verde||[]).some(x=>x.playerId===playerId)) vCount++;
+    if((m.naranja||[]).some(x=>x.playerId===playerId)) nCount++;
+  });
+  overlay.innerHTML = `
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <h2 class="sheet-title">${escapeHtml(p.name)}</h2>
+      <div class="section-title">Efectividad (por partido jugado)</div>
+      <div class="card">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div style="background:var(--navy-light);border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;">Goles / partido</div>
+            <div style="font-size:20px;font-weight:800;color:var(--navy);">${efGoles.toFixed(2)}</div>
+          </div>
+          <div style="background:var(--navy-light);border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;">Puntos / partido</div>
+            <div style="font-size:20px;font-weight:800;color:var(--navy);">${efPuntos.toFixed(2)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="section-title" style="color:var(--navy);font-size:14px;">⚽ Progresión de goles (acumulado)</div>
+      <div class="card"><canvas id="chartGoals${playerId}" height="140"></canvas></div>
+      <div class="section-title" style="color:var(--navy);font-size:14px;">🏆 Progresión de puntos (acumulado)</div>
+      <div class="card"><canvas id="chartPoints${playerId}" height="140"></canvas></div>
+      <div style="text-align:center;font-size:12.5px;color:var(--muted);margin:4px 0 16px;">🟢 Verde: ${vCount} veces · 🟠 Naranja: ${nCount} veces</div>
+      <button class="btn-ghost btn-block" id="closeStatsBtn">Cerrar</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  if(window.Chart){
+    const chartOpts = (yLabel)=>({
+      responsive:true, animation:false,
+      plugins:{ legend:{
+        display:true, position:'bottom',
+        labels:{
+          boxWidth:24, usePointStyle:true, font:{size:11},
+          generateLabels: (chart)=> chart.data.datasets.map((ds,i)=>({
+            text: ds.label, strokeStyle: ds.borderColor, fillStyle: ds.borderColor,
+            lineWidth: ds.borderWidth, lineDash: ds.borderDash||[], pointStyle: ds.pointStyle||'line', datasetIndex: i
+          }))
+        }
+      }},
+      scales:{
+        x:{ ticks:{ color:'#6B7383', font:{size:10} }, grid:{ color:'#EDF1FA' } },
+        y:{ ticks:{ color:'#6B7383', font:{size:10} }, grid:{ color:'#EDF1FA' }, title:{ display:true, text:yLabel, color:'#6B7383', font:{size:10} } }
+      }
+    });
+    new Chart(document.getElementById('chartGoals'+playerId), {
+      type:'line',
+      data:{ labels, datasets:[
+        { label:p.name, data:goalsSeries, borderColor:'#0B1220', backgroundColor:'#EDF1FA', borderWidth:2.5, pointRadius:2, pointStyle:'line', fill:true, tension:0.15, order:1 },
+        { label:'Media de la liga', data:refGoals, borderColor:'#6B7383', borderWidth:2, borderDash:[5,4], pointRadius:0, pointStyle:'line', fill:false, order:0 }
+      ]},
+      options: chartOpts('Goles acumulados')
+    });
+    new Chart(document.getElementById('chartPoints'+playerId), {
+      type:'line',
+      data:{ labels, datasets:[
+        { label:p.name, data:pointsSeries, borderColor:'#0B1220', backgroundColor:'#EDF1FA', borderWidth:2.5, pointRadius:2, pointStyle:'line', fill:true, tension:0.15, order:1 },
+        { label:'Media de la liga', data:refPoints, borderColor:'#6B7383', borderWidth:2, borderDash:[5,4], pointRadius:0, pointStyle:'line', fill:false, order:0 }
+      ]},
+      options: chartOpts('Puntos acumulados')
+    });
+  }
+  overlay.onclick = e=>{ if(e.target===overlay) overlay.remove(); };
+  document.getElementById('closeStatsBtn').onclick = ()=> overlay.remove();
 }
 
 async function exportRanking(type){
