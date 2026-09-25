@@ -842,6 +842,11 @@ function openMatchForm(matchId){
 function renderPagos(content){
   const sorted = payments.slice().sort((a,b)=> b.date.localeCompare(a.date));
   content.innerHTML = `
+    <div class="section-title">Exportar datos</div>
+    <div class="card">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Descarga un archivo .json con jugadores, partidos (con sus petos), precios de la cancha y pagos — útil para hacer pruebas con los datos reales sin tocar la app en vivo.</div>
+      <button class="btn-gold btn-block" id="exportDataBtn">Exportar datos (JSON)</button>
+    </div>
     <div class="section-title">Precio de la cancha</div>
     <div class="card">
       <div style="text-align:center;margin-bottom:14px;">
@@ -896,6 +901,20 @@ function renderPagos(content){
         }).join('')}
     </div>
   `;
+  document.getElementById('exportDataBtn').onclick = ()=>{
+    const data = {
+      exportedAt: new Date().toISOString(),
+      players, matches, courtPrices, payments
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `futbol_viernes_datos_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Datos exportados');
+  };
   document.getElementById('addPriceBtn').onclick = async ()=>{
     const date = document.getElementById('newPriceDate').value;
     const price = parseMoney(document.getElementById('newPriceAmount').value);
