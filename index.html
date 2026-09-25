@@ -1058,7 +1058,7 @@ function renderClasificacion(content){
         </tbody>
       </table>`}
     </div>
-    ${isAdmin ? (()=>{ const vn = verdeVsNaranja();
+    ${(()=>{ const vn = verdeVsNaranja();
       if(vn.total===0) return '';
       const vPts = vn.vWins*3 + vn.draws*1;
       const nPts = vn.nWins*3 + vn.draws*1;
@@ -1073,7 +1073,7 @@ function renderClasificacion(content){
           </tbody>
         </table>
       </div>`;
-    })() : ''}
+    })()}
     <div class="export-bar">
       <button class="btn-gold" id="exportJpgBtn" style="flex:1;">Exportar JPG</button>
       <button class="btn-gold" id="exportPdfBtn" style="flex:1;">Exportar PDF</button>
@@ -1163,7 +1163,7 @@ function openPlayerStats(playerId){
       }},
       scales:{
         x:{ ticks:{ color:'#6B7383', font:{size:10} }, grid:{ color:'#EDF1FA' } },
-        y:{ ticks:{ color:'#6B7383', font:{size:10} }, grid:{ color:'#EDF1FA' }, title:{ display:true, text:yLabel, color:'#6B7383', font:{size:10} } }
+        y:{ min:0, ticks:{ color:'#6B7383', font:{size:10} }, grid:{ color:'#EDF1FA' }, title:{ display:true, text:yLabel, color:'#6B7383', font:{size:10} } }
       }
     });
     new Chart(document.getElementById('chartGoals'+playerId), {
