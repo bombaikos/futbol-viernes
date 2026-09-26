@@ -1166,38 +1166,86 @@ function openPlayerStats(playerId){
     </div>`;
   document.body.appendChild(overlay);
   if(window.Chart){
+    const endLabelsPlugin = {
+      id: 'endLabels',
+      afterDatasetsDraw(chart){
+        const ctx = chart.ctx;
+        const infos = chart.data.datasets.map((ds,i)=>{
+          const meta = chart.getDatasetMeta(i);
+          if(meta.hidden || !ds.data.length) return null;
+          const lastIndex = ds.data.length-1;
+          const pt = meta.data[lastIndex];
+          const val = ds.data[lastIndex];
+          if(!pt || val==null) return null;
+          return { ds, pt, val, i };
+        }).filter(Boolean);
+        if(!infos.length) return;
+        const sorted = infos.slice().sort((a,b)=>b.val-a.val);
+        const gap = 13;
+        sorted.forEach((info, rank)=>{
+          ctx.save();
+          ctx.font = 'bold 11px DM Sans, sans-serif';
+          ctx.fillStyle = info.ds.borderColor || cssColor('--navy');
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(
+            Number.isInteger(info.val) ? info.val : info.val.toFixed(1),
+            info.pt.x+6, info.pt.y+(rank===0?-gap:gap)
+          );
+          ctx.restore();
+        });
+      }
+    };
     const chartOpts = (yLabel)=>({
       responsive:true, animation:false,
-      plugins:{ legend:{
-        display:true, position:'bottom',
-        labels:{
-          boxWidth:24, usePointStyle:true, font:{size:11},
-          generateLabels: (chart)=> chart.data.datasets.map((ds,i)=>({
-            text: ds.label, strokeStyle: ds.borderColor, fillStyle: ds.borderColor,
-            lineWidth: ds.borderWidth, lineDash: ds.borderDash||[], pointStyle: ds.pointStyle||'line', datasetIndex: i
-          }))
+      layout:{ padding:{ right:36, top:20 } },
+      plugins:{
+        legend:{
+          display:true, position:'bottom',
+          labels:{
+            boxWidth:24, usePointStyle:true, font:{size:11},
+            generateLabels: (chart)=> chart.data.datasets.map((ds,i)=>({
+              text: ds.label, strokeStyle: ds.borderColor, fillStyle: ds.borderColor,
+              lineWidth: ds.borderWidth, lineDash: ds.borderDash||[], pointStyle:'line', datasetIndex: i
+            }))
+          }
+        },
+        tooltip:{
+          mode:'nearest', intersect:false, displayColors:false,
+          filter:(item)=> item.datasetIndex===0,
+          callbacks:{
+            title:()=>'',
+            label:(item)=>`${item.label} — ${item.formattedValue}`
+          }
         }
-      }},
+      },
       scales:{
-        x:{ ticks:{ color: cssColor('--muted'), font:{size:10} }, grid:{ color: cssColor('--navy-light') } },
-        y:{ min:0, ticks:{ color: cssColor('--muted'), font:{size:10} }, grid:{ color: cssColor('--navy-light') }, title:{ display:true, text:yLabel, color: cssColor('--muted'), font:{size:10} } }
+        x:{ ticks:{ color:cssColor('--muted'), font:{size:10}, maxRotation:0, minRotation:0, autoSkip:true, maxTicksLimit:8 }, grid:{ color:cssColor('--navy-light') } },
+        y:{ min:0, ticks:{ color:cssColor('--muted'), font:{size:10} }, grid:{ color:cssColor('--navy-light') }, title:{ display:true, text:yLabel, color:cssColor('--muted'), font:{size:10} } }
       }
     });
+    const makeDatasets = (playerSeries, refSeries, name)=>[
+      { label:name, data:playerSeries, borderColor: cssColor('--navy'), backgroundColor: cssColor('--navy-light'), borderWidth:2.5,
+        pointRadius: playerSeries.map((_,i)=> i===playerSeries.length-1 ? 4 : 0),
+        pointHoverRadius: playerSeries.map((_,i)=> i===playerSeries.length-1 ? 5 : 3),
+        pointStyle:'circle', fill:true, tension:0.15, order:1 },
+      { label:'Media de la liga', data:refSeries, borderColor: cssColor('--muted'), borderWidth:2,
+        borderDash:[5,4],
+        pointRadius: refSeries.map((_,i)=> i===refSeries.length-1 ? 3 : 0),
+        pointHoverRadius: refSeries.map((_,i)=> i===refSeries.length-1 ? 4 : 3),
+        pointStyle:'circle', fill:false, order:0 }
+    ];
     new Chart(document.getElementById('chartGoals'+playerId), {
       type:'line',
-      data:{ labels, datasets:[
-        { label:p.name, data:goalsSeries, borderColor: cssColor('--navy'), backgroundColor: cssColor('--navy-light'), borderWidth:2.5, pointRadius:2, pointStyle:'line', fill:true, tension:0.15, order:1 },
-        { label:'Media de la liga', data:refGoals, borderColor: cssColor('--muted'), borderWidth:2, borderDash:[5,4], pointRadius:0, pointStyle:'line', fill:false, order:0 }
-      ]},
-      options: chartOpts('Goles acumulados')
+      data:{ labels, datasets: makeDatasets(goalsSeries, refGoals, p.name) },
+      options: chartOpts('Goles acumulados'),
+      plugins: [endLabelsPlugin]
     });
     new Chart(document.getElementById('chartPoints'+playerId), {
       type:'line',
-      data:{ labels, datasets:[
-        { label:p.name, data:pointsSeries, borderColor: cssColor('--navy'), backgroundColor: cssColor('--navy-light'), borderWidth:2.5, pointRadius:2, pointStyle:'line', fill:true, tension:0.15, order:1 },
-        { label:'Media de la liga', data:refPoints, borderColor: cssColor('--muted'), borderWidth:2, borderDash:[5,4], pointRadius:0, pointStyle:'line', fill:false, order:0 }
-      ]},
-      options: chartOpts('Puntos acumulados')
+      data:{ labels, datasets: makeDatasets(pointsSeries, refPoints, p.name) },
+      options: chartOpts('Puntos acumulados'),
+      plugins: [endLabelsPlugin]
     });
   }
   overlay.onclick = e=>{ if(e.target===overlay) overlay.remove(); };
