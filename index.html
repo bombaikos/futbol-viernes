@@ -23,11 +23,12 @@
 
 <style>
   :root{
-    --navy: #0B1220;
-    --navy-light: #EDF1FA;
-    --navy-mid: #C9D3E8;
+    --hue: 222;  /* cambia solo este número para cambiar toda la paleta de color */
+    --navy:       hsl(var(--hue), 48%,  8%);
+    --navy-light: hsl(var(--hue), 67%, 96%);
+    --navy-mid:   hsl(var(--hue), 37%, 72%);
     --white: #FFFFFF;
-    --muted: #6B7383;
+    --muted:      hsl(var(--hue), 10%, 46%);
     --danger: #C0392B;
     --danger-soft: #FBEAEA;
   }
@@ -946,10 +947,22 @@ function renderPagos(content){
     </div>
     <div class="section-title">Exportar datos</div>
     <div class="card">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Descarga un archivo .json con jugadores, partidos (con sus petos), precios de la cancha y pagos — útil para hacer pruebas con los datos reales sin tocar la app en vivo.</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Exporta un archivo con los jugadores, pagos, precios de la cancha y partidos.</div>
       <button class="btn-gold btn-block" id="exportDataBtn">Exportar datos (JSON)</button>
     </div>
+    <div class="section-title">Color de la app</div>
+    <div class="card">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Arrastra para cambiar el tono de color de toda la interfaz.</div>
+      <input type="range" id="hueSlider" min="0" max="360" value="222"
+        style="width:100%;accent-color:var(--navy);height:6px;border:none;padding:0;cursor:pointer;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px;">
+        <span>🔴 0°</span><span>🟢 120°</span><span>🔵 222°</span><span>🟣 270°</span><span>🔴 360°</span>
+      </div>
+    </div>
   `;
+  document.getElementById('hueSlider').oninput = (e)=>{
+    document.documentElement.style.setProperty('--hue', e.target.value);
+  };
   document.getElementById('exportDataBtn').onclick = ()=>{
     const data = {
       exportedAt: new Date().toISOString(),
@@ -1090,6 +1103,10 @@ function renderClasificacion(content){
   }
 }
 
+function cssColor(varName){
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+}
+
 function openPlayerStats(playerId){
   const p = players.find(pp=>pp.id===playerId);
   if(!p) return;
@@ -1162,23 +1179,23 @@ function openPlayerStats(playerId){
         }
       }},
       scales:{
-        x:{ ticks:{ color:'#6B7383', font:{size:10} }, grid:{ color:'#EDF1FA' } },
-        y:{ min:0, ticks:{ color:'#6B7383', font:{size:10} }, grid:{ color:'#EDF1FA' }, title:{ display:true, text:yLabel, color:'#6B7383', font:{size:10} } }
+        x:{ ticks:{ color: cssColor('--muted'), font:{size:10} }, grid:{ color: cssColor('--navy-light') } },
+        y:{ min:0, ticks:{ color: cssColor('--muted'), font:{size:10} }, grid:{ color: cssColor('--navy-light') }, title:{ display:true, text:yLabel, color: cssColor('--muted'), font:{size:10} } }
       }
     });
     new Chart(document.getElementById('chartGoals'+playerId), {
       type:'line',
       data:{ labels, datasets:[
-        { label:p.name, data:goalsSeries, borderColor:'#0B1220', backgroundColor:'#EDF1FA', borderWidth:2.5, pointRadius:2, pointStyle:'line', fill:true, tension:0.15, order:1 },
-        { label:'Media de la liga', data:refGoals, borderColor:'#6B7383', borderWidth:2, borderDash:[5,4], pointRadius:0, pointStyle:'line', fill:false, order:0 }
+        { label:p.name, data:goalsSeries, borderColor: cssColor('--navy'), backgroundColor: cssColor('--navy-light'), borderWidth:2.5, pointRadius:2, pointStyle:'line', fill:true, tension:0.15, order:1 },
+        { label:'Media de la liga', data:refGoals, borderColor: cssColor('--muted'), borderWidth:2, borderDash:[5,4], pointRadius:0, pointStyle:'line', fill:false, order:0 }
       ]},
       options: chartOpts('Goles acumulados')
     });
     new Chart(document.getElementById('chartPoints'+playerId), {
       type:'line',
       data:{ labels, datasets:[
-        { label:p.name, data:pointsSeries, borderColor:'#0B1220', backgroundColor:'#EDF1FA', borderWidth:2.5, pointRadius:2, pointStyle:'line', fill:true, tension:0.15, order:1 },
-        { label:'Media de la liga', data:refPoints, borderColor:'#6B7383', borderWidth:2, borderDash:[5,4], pointRadius:0, pointStyle:'line', fill:false, order:0 }
+        { label:p.name, data:pointsSeries, borderColor: cssColor('--navy'), backgroundColor: cssColor('--navy-light'), borderWidth:2.5, pointRadius:2, pointStyle:'line', fill:true, tension:0.15, order:1 },
+        { label:'Media de la liga', data:refPoints, borderColor: cssColor('--muted'), borderWidth:2, borderDash:[5,4], pointRadius:0, pointStyle:'line', fill:false, order:0 }
       ]},
       options: chartOpts('Puntos acumulados')
     });
