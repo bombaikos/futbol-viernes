@@ -24,7 +24,7 @@
 <style>
   :root{
     --hue: 222;  /* cambia solo este número para cambiar toda la paleta de color */
-    --navy:       hsl(var(--hue), 48%,  8%);
+    --navy:       hsl(var(--hue), 48%, 16%);
     --navy-light: hsl(var(--hue), 67%, 96%);
     --navy-mid:   hsl(var(--hue), 37%, 72%);
     --white: #FFFFFF;
@@ -175,6 +175,7 @@ let config = { pointsPerGoal: 1 };
 let courtPrices = []; // [{id, date, price}] historial de precios de la cancha
 let payments = []; // [{id, playerId, date, amount, note}] pagos recibidos
 let activeTab = 'partidos';
+let bubbleChart = null; // instancia viva del mapa de burbujas; se destruye antes de cada render
 let sortBy = 'pts'; // 'pts' o 'gf'
 
 // Jugadores invitados: seleccionables en un partido, pero no forman parte
@@ -279,6 +280,12 @@ async function deletePaymentDoc(id){
   await db.collection('payments').doc(id).delete();
 }
 function isGuestId(id){ return GUESTS.some(g=>g.id===id); }
+// Fecha de hoy (YYYY-MM-DD) en hora de Madrid, sea cual sea la zona horaria
+// del dispositivo. toISOString() daría la fecha UTC, que entre las 00:00 y
+// las 02:00 de Madrid todavía sería el día anterior.
+function todayMadrid(){
+  return new Intl.DateTimeFormat('en-CA', { timeZone:'Europe/Madrid', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date());
+}
 
 // Historial combinado de un jugador: pagos reales + cargo calculado de cada
 // partido que jugó + fechas en que se llevó los petos. Nada de esto (salvo
@@ -325,7 +332,7 @@ function computePetosCount(playerId){
   return matches.filter(m=>m.petos===playerId).length;
 }
 function currentCourtPrice(){
-  return priceAt(new Date().toISOString().slice(0,10));
+  return priceAt(todayMadrid());
 }
 
 // ---------- Progresión temporal (solo admin) ----------
@@ -376,11 +383,12 @@ function verdeVsNaranja(){
   return { vWins, nWins, draws, vGoals, nGoals, total: matches.length };
 }
 
-function showToast(msg){
+function showToast(msg, ms=1800){
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'), 1800);
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=>t.classList.remove('show'), ms);
 }
 function uid(){ return db.collection('_').doc().id; }
 
@@ -491,10 +499,8 @@ function fmtDate(d){
   return dt.toLocaleDateString('es-ES', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
 }
 function todayDDMMYYYY(){
-  const d = new Date();
-  const dd = String(d.getDate()).padStart(2,'0');
-  const mm = String(d.getMonth()+1).padStart(2,'0');
-  return `${dd}.${mm}.${d.getFullYear()}`;
+  const [y, m, d] = todayMadrid().split('-');
+  return `${d}.${m}.${y}`;
 }
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 // Acepta tanto coma como punto como separador decimal al escribir importes.
@@ -505,6 +511,7 @@ function parseMoney(str){
 
 // ---------- Render root ----------
 function render(){
+  if(bubbleChart){ bubbleChart.destroy(); bubbleChart = null; }
   const app = document.getElementById('app');
   if(!ready()){
     app.innerHTML = `<div class="empty" style="padding-top:80px;">Cargando…</div>`;
@@ -757,7 +764,7 @@ function openMatchView(matchId){
 function openMatchForm(matchId){
   if(players.length < 2){ showToast('Añade al menos 2 jugadores primero'); return; }
   const editing = !!matchId;
-  const match = editing ? matches.find(m=>m.id===matchId) : { id: uid(), date: new Date().toISOString().slice(0,10), verde: [], naranja: [] };
+  const match = editing ? matches.find(m=>m.id===matchId) : { id: uid(), date: todayMadrid(), verde: [], naranja: [] };
   if(editing && !match){ showToast('Ese partido ya no existe'); return; }
   const work = JSON.parse(JSON.stringify(match));
 
@@ -876,6 +883,8 @@ function openMatchForm(matchId){
   document.getElementById('saveMatchBtn').onclick = async ()=>{
     work.date = document.getElementById('matchDate').value;
     if(!work.date){ showToast('Indica una fecha'); return; }
+    const sameDay = matches.find(m=> m.date===work.date && m.id!==work.id);
+    if(sameDay){ showToast(`Ya hay un partido registrado el ${fmtDate(work.date)}. Bórralo primero para poder anotar otro en esa fecha.`, 4200); return; }
     if(work.verde.length < 5 || work.verde.length > 6){ showToast('El equipo Verde necesita 5 o 6 jugadores'); return; }
     if(work.naranja.length < 5 || work.naranja.length > 6){ showToast('El equipo Naranja necesita 5 o 6 jugadores'); return; }
     work.verde = work.verde.map(x=>({ playerId:x.playerId, goals: Number(x.goals)||0, ...(isGuestId(x.playerId) ? {paga: x.paga!==false} : {}) }));
@@ -900,7 +909,7 @@ function renderPagos(content){
       </div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Si introduces una fecha que ya existe, sustituye el importe anterior de ese día. Se usa el precio vigente en la fecha de cada partido.</div>
       <div class="row" style="margin-bottom:10px;">
-        <input type="date" id="newPriceDate" value="${new Date().toISOString().slice(0,10)}" style="flex:1;">
+        <input type="date" id="newPriceDate" value="${todayMadrid()}" style="flex:1;">
         <input type="text" inputmode="decimal" id="newPriceAmount" placeholder="€ (ej. 45 o 45,50)" style="width:130px;">
         <button class="btn-primary btn-sm" id="addPriceBtn">Añadir</button>
       </div>
@@ -917,7 +926,7 @@ function renderPagos(content){
     <div class="section-title">Añadir pago</div>
     <div class="card">
       <div class="row" style="flex-wrap:wrap;gap:10px;">
-        <input type="date" id="newPaymentDate" value="${new Date().toISOString().slice(0,10)}" style="flex:1;min-width:130px;">
+        <input type="date" id="newPaymentDate" value="${todayMadrid()}" style="flex:1;min-width:130px;">
         <select id="newPaymentPlayer" style="flex:1;min-width:130px;">
           ${players.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}
         </select>
@@ -961,7 +970,13 @@ function renderPagos(content){
     </div>
   `;
   document.getElementById('hueSlider').oninput = (e)=>{
-    document.documentElement.style.setProperty('--hue', e.target.value);
+    const h = e.target.value;
+    const r = document.documentElement;
+    r.style.setProperty('--hue', h);
+    r.style.setProperty('--navy',       `hsl(${h}, 48%, 16%)`);
+    r.style.setProperty('--navy-light', `hsl(${h}, 67%, 96%)`);
+    r.style.setProperty('--navy-mid',   `hsl(${h}, 37%, 72%)`);
+    r.style.setProperty('--muted',      `hsl(${h}, 10%, 46%)`);
   };
   document.getElementById('exportDataBtn').onclick = ()=>{
     const data = {
@@ -972,7 +987,7 @@ function renderPagos(content){
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `futbol_viernes_datos_${new Date().toISOString().slice(0,10)}.json`;
+    a.download = `futbol_viernes_datos_${todayMadrid()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     showToast('Datos exportados');
@@ -1087,18 +1102,117 @@ function renderClasificacion(content){
         </table>
       </div>`;
     })()}
+    ${isAdmin ? `
+    <div class="section-title" style="margin-top:26px;">Mapa de jugadores</div>
+    <div class="card" style="position:relative;">
+      <canvas id="bubbleChart" height="300"></canvas>
+    </div>
     <div class="export-bar">
       <button class="btn-gold" id="exportJpgBtn" style="flex:1;">Exportar JPG</button>
       <button class="btn-gold" id="exportPdfBtn" style="flex:1;">Exportar PDF</button>
-    </div>
+    </div>` : ''}
   `;
   document.getElementById('sortByPts').onclick = ()=>{ sortBy='pts'; render(); };
   document.getElementById('sortByGf').onclick = ()=>{ sortBy='gf'; render(); };
-  document.getElementById('exportJpgBtn').onclick = ()=> exportRanking('jpg');
-  document.getElementById('exportPdfBtn').onclick = ()=> exportRanking('pdf');
   if(isAdmin){
+    document.getElementById('exportJpgBtn').onclick = ()=> exportRanking('jpg');
+    document.getElementById('exportPdfBtn').onclick = ()=> exportRanking('pdf');
     content.querySelectorAll('[data-stats-row]').forEach(row=>{
       row.onclick = ()=> openPlayerStats(row.dataset.id);
+    });
+  }
+
+  if(isAdmin && window.Chart && stats.length > 0){
+    const maxPj = Math.max(...stats.map(s=>s.pj), 1);
+    const bubbleData = stats.map(s=>({
+      x: s.gf, y: s.pts,
+      r: Math.max(4, Math.round((s.pj / maxPj) * 9)),
+      name: s.name, pj: s.pj
+    }));
+    const LABEL_FRACTION = 0.5;
+    const nLabels = Math.max(1, Math.round(bubbleData.length * LABEL_FRACTION));
+    const toLabel = new Set(bubbleData.slice().sort((a,b)=>b.pj-a.pj).slice(0,nLabels).map(d=>d.name));
+
+    bubbleChart = new Chart(document.getElementById('bubbleChart'), {
+      type: 'bubble',
+      data:{ datasets:[{
+        data: bubbleData,
+        backgroundColor: bubbleData.map(()=> cssColor('--navy-light')),
+        borderColor: bubbleData.map(()=> cssColor('--navy')),
+        borderWidth: 1.5
+      }]},
+      options:{
+        responsive: true, animation: false,
+        layout:{ padding:{ top:16, bottom:12, left:8, right:16 } },
+        plugins:{
+          legend:{ display: false },
+          tooltip:{
+            displayColors: false,
+            callbacks:{
+              title: ()=> '',
+              label: (item)=>{ const d=bubbleData[item.dataIndex]; return `${d.name} · ${d.pj} PJ · ${item.parsed.x} goles · ${item.parsed.y} pts`; }
+            }
+          }
+        },
+        scales:{
+          x:{ min:-0.3, title:{ display:true, text:'Goles', color:cssColor('--muted'), font:{size:10} }, ticks:{ color:cssColor('--muted'), font:{size:10}, callback:(v)=>v<0?'':v }, grid:{ color:cssColor('--navy-light') }, afterBuildTicks:(axis)=>{ if(!axis.ticks.some(t=>t.value===0)) axis.ticks.unshift({value:0}); } },
+          y:{ min:-0.5, title:{ display:true, text:'Puntos', color:cssColor('--muted'), font:{size:10} }, ticks:{ color:cssColor('--muted'), font:{size:10}, callback:(v)=>v<0?'':v }, grid:{ color:cssColor('--navy-light') }, afterBuildTicks:(axis)=>{ if(!axis.ticks.some(t=>t.value===0)) axis.ticks.unshift({value:0}); } }
+        }
+      },
+      plugins:[{
+        id: 'bubbleLabels',
+        afterDatasetsDraw(chart){
+          const ctx = chart.ctx;
+          const meta = chart.getDatasetMeta(0);
+          const FONT_SIZE=10, CHAR_W=5.5, LH=13, MAX_ITER=30;
+          const chartArea = chart.chartArea;
+          const labeled = bubbleData.map((d,i)=>({
+            d, i, pt: meta.data[i], w: d.name.length*CHAR_W, h: LH
+          })).filter(l=> toLabel.has(l.d.name));
+          labeled.forEach(l=>{
+            const aboveY = l.pt.y - l.d.r - 8 - LH;
+            l.lx = l.pt.x - l.w/2;
+            l.ly = aboveY >= chartArea.top ? aboveY : l.pt.y + l.d.r + 8;
+          });
+          for(let iter=0; iter<MAX_ITER; iter++){
+            let moved=false;
+            for(let a=0;a<labeled.length;a++){
+              for(let b=a+1;b<labeled.length;b++){
+                const A=labeled[a],B=labeled[b];
+                const ox=Math.min(A.lx+A.w,B.lx+B.w)-Math.max(A.lx,B.lx);
+                const oy=Math.min(A.ly+A.h,B.ly+B.h)-Math.max(A.ly,B.ly);
+                if(ox>0&&oy>0){ if(ox<oy){const dx=ox/2+1;A.lx-=dx;B.lx+=dx;}else{const dy=oy/2+1;A.ly-=dy;B.ly+=dy;} moved=true; }
+              }
+            }
+            for(const L of labeled){
+              for(let j=0;j<bubbleData.length;j++){
+                if(j===L.i) continue;
+                const pt=meta.data[j],r=bubbleData[j].r+2;
+                const cx=L.lx+L.w/2,cy=L.ly+L.h/2,dx=cx-pt.x,dy=cy-pt.y;
+                const dist=Math.sqrt(dx*dx+dy*dy);
+                if(dist<r+L.w/2){const push=(r+L.w/2-dist+2)/2,nx=dx/dist||0,ny=dy/dist||0;L.lx+=nx*push;L.ly+=ny*push;moved=true;}
+              }
+            }
+            for(const L of labeled){
+              L.lx=Math.max(chartArea.left,Math.min(chartArea.right-L.w,L.lx));
+              L.ly=Math.max(chartArea.top,Math.min(chartArea.bottom-L.h,L.ly));
+            }
+            if(!moved) break;
+          }
+          ctx.save();
+          ctx.font=`600 ${FONT_SIZE}px DM Sans, sans-serif`;
+          ctx.textBaseline='top';
+          labeled.forEach(L=>{
+            const cx=L.lx+L.w/2,cy=L.ly+L.h/2;
+            const poleY=(L.ly>L.pt.y)?L.pt.y+L.d.r:L.pt.y-L.d.r;
+            ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(L.pt.x,poleY);
+            ctx.strokeStyle=cssColor('--navy-mid');ctx.lineWidth=0.8;ctx.stroke();
+            ctx.fillStyle='rgba(255,255,255,0.82)';ctx.fillRect(L.lx-2,L.ly-1,L.w+4,L.h+2);
+            ctx.fillStyle=cssColor('--navy');ctx.fillText(L.d.name,L.lx,L.ly);
+          });
+          ctx.restore();
+        }
+      }]
     });
   }
 }
@@ -1165,6 +1279,7 @@ function openPlayerStats(playerId){
       <button class="btn-ghost btn-block" id="closeStatsBtn">Cerrar</button>
     </div>`;
   document.body.appendChild(overlay);
+  const statCharts = [];
   if(window.Chart){
     const endLabelsPlugin = {
       id: 'endLabels',
@@ -1235,21 +1350,22 @@ function openPlayerStats(playerId){
         pointHoverRadius: refSeries.map((_,i)=> i===refSeries.length-1 ? 4 : 3),
         pointStyle:'circle', fill:false, order:0 }
     ];
-    new Chart(document.getElementById('chartGoals'+playerId), {
+    statCharts.push(new Chart(document.getElementById('chartGoals'+playerId), {
       type:'line',
       data:{ labels, datasets: makeDatasets(goalsSeries, refGoals, p.name) },
       options: chartOpts('Goles acumulados'),
       plugins: [endLabelsPlugin]
-    });
-    new Chart(document.getElementById('chartPoints'+playerId), {
+    }));
+    statCharts.push(new Chart(document.getElementById('chartPoints'+playerId), {
       type:'line',
       data:{ labels, datasets: makeDatasets(pointsSeries, refPoints, p.name) },
       options: chartOpts('Puntos acumulados'),
       plugins: [endLabelsPlugin]
-    });
+    }));
   }
-  overlay.onclick = e=>{ if(e.target===overlay) overlay.remove(); };
-  document.getElementById('closeStatsBtn').onclick = ()=> overlay.remove();
+  const closeStats = ()=>{ statCharts.forEach(c=>c.destroy()); overlay.remove(); };
+  overlay.onclick = e=>{ if(e.target===overlay) closeStats(); };
+  document.getElementById('closeStatsBtn').onclick = closeStats;
 }
 
 async function exportRanking(type){
