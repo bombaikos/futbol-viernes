@@ -114,6 +114,10 @@
   .pick-row .pname{ flex:1; font-size:14.5px; }
   .pick-row .goals-input{ width:60px; text-align:center; padding:6px; }
   .tag{ display:inline-block; font-size:10px; font-weight:600; background:var(--navy-light); color:var(--muted); padding:2px 7px; border-radius:5px; margin-left:6px; vertical-align:middle; }
+  .elo-delta{ display:none; font-size:12px; font-weight:600; color:var(--muted); min-width:30px; text-align:right; }
+  .elo-open .elo-delta{ display:inline-block; }
+  .elo-delta.up{ color:#1E7A3C; }
+  .elo-delta.down{ color:var(--danger); }
   .elo-toggle-row{ display:flex; align-items:center; justify-content:center; gap:18px; margin-bottom:4px; }
   .info-dot{ position:relative; display:inline-flex; width:17px; height:17px; border-radius:50%; border:1px solid var(--muted); color:var(--muted); font:italic 700 10px Georgia, serif; align-items:center; justify-content:center; cursor:pointer; vertical-align:middle; text-transform:none; }
   .info-dot::after{ content:''; position:absolute; inset:-9px; } /* zona de toque más grande */
@@ -598,16 +602,32 @@ function eloPanelHtml(verde, naranja, date, played){
       ${played ? eloResultLine(played) : ''}
     </div>`;
 }
+// Cuánto Elo ganó o perdió cada jugador de la plantilla en el partido `m`: { [playerId]: delta }.
+function eloMatchDeltas(m){
+  const before = computeElo(m.date), after = computeElo(m.date, true);
+  const d = {};
+  [...(m.verde||[]), ...(m.naranja||[])].forEach(x=>{
+    if(before[x.playerId]) d[x.playerId] = after[x.playerId].rating - before[x.playerId].rating;
+  });
+  return d;
+}
+const fmtEloDelta = d=> (Math.round(d) > 0 ? '+' : Math.round(d) < 0 ? '−' : '') + Math.abs(Math.round(d));
+// Número de Elo ganado/perdido junto a cada jugador; solo se ve con el panel "Elo ▾" abierto.
+function eloDeltaHtml(d){
+  if(d==null) return '<span class="elo-delta"></span>';
+  const r = Math.round(d);
+  return `<span class="elo-delta ${r>0?'up':r<0?'down':''}">${fmtEloDelta(d)}</span>`;
+}
 // "Elo ganado: Verde +16 · Naranja −16 (media por jugador)". Solo cuenta a los jugadores de
 // la plantilla que jugaron en un único equipo (los invitados no cambian su Elo).
 function eloResultLine(m){
-  const before = computeElo(m.date), after = computeElo(m.date, true);
+  const deltas = eloMatchDeltas(m);
   const v = (m.verde||[]).map(x=>x.playerId), n = (m.naranja||[]).map(x=>x.playerId);
   const avgDelta = (ids, other)=>{
-    const ds = ids.filter(id=> before[id] && !other.includes(id)).map(id=> after[id].rating - before[id].rating);
+    const ds = ids.filter(id=> id in deltas && !other.includes(id)).map(id=> deltas[id]);
     return ds.length ? ds.reduce((a,b)=>a+b,0) / ds.length : null;
   };
-  const fmt = d=> d==null ? '–' : (Math.round(d) > 0 ? '+' : Math.round(d) < 0 ? '−' : '') + Math.abs(Math.round(d));
+  const fmt = d=> d==null ? '–' : fmtEloDelta(d);
   return `<div style="margin-top:4px;">Elo ganado: Verde ${fmt(avgDelta(v, n))} · Naranja ${fmt(avgDelta(n, v))} <span style="font-size:11px;">(media por jugador)</span></div>`;
 }
 const ELO_TOGGLE_HTML = `<div class="elo-toggle-row"><button class="elo-toggle" id="eloToggle">Elo <span class="chev">▾</span></button>${ELO_INFO_HTML}</div><div id="eloBalance" hidden></div>`;
@@ -616,6 +636,7 @@ function bindEloToggle(update){
     const box = document.getElementById('eloBalance');
     box.hidden = !box.hidden;
     document.getElementById('eloToggle').classList.toggle('open', !box.hidden);
+    box.closest('.sheet').classList.toggle('elo-open', !box.hidden);
     update();
   };
 }
@@ -899,9 +920,10 @@ function openMatchView(matchId){
   const {v, n} = matchScore(m);
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
+  const deltas = showElo() ? eloMatchDeltas(m) : {};
   const line = (team)=> (m[team]||[]).map(x=>{
     const p = findAnyPlayer(x.playerId);
-    return `<div class="pick-row"><div class="pname">${escapeHtml(p?p.name:'(jugador eliminado)')}</div><div style="font-weight:700;">${x.goals}</div></div>`;
+    return `<div class="pick-row"><div class="pname">${escapeHtml(p?p.name:'(jugador eliminado)')}</div>${eloDeltaHtml(deltas[x.playerId])}<div style="font-weight:700;min-width:22px;text-align:right;">${x.goals}</div></div>`;
   }).join('');
   const petosName = m.petos ? (findAnyPlayer(m.petos)?.name || '(jugador eliminado)') : null;
   overlay.innerHTML = `
@@ -932,6 +954,7 @@ function openMatchForm(matchId){
   const match = editing ? matches.find(m=>m.id===matchId) : { id: uid(), date: todayMadrid(), verde: [], naranja: [] };
   if(editing && !match){ showToast('Ese partido ya no existe'); return; }
   const work = JSON.parse(JSON.stringify(match));
+  const savedDeltas = editing ? eloMatchDeltas(match) : null; // Elo ganado en el partido tal como está guardado
 
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
@@ -996,6 +1019,7 @@ function openMatchForm(matchId){
       return `<div class="pick-row ${checked?'checked':''}">
           <input type="checkbox" data-team="${team}" data-id="${p.id}" ${checked?'checked':''}>
           <div class="pname">${escapeHtml(p.name)}${inBoth ? ' <span class="tag">EN AMBOS</span>' : ''}</div>
+          ${checked && savedDeltas ? eloDeltaHtml(savedDeltas[p.id]) : ''}
           ${checked && isGuestId(p.id) && !(team==='naranja' && inBoth) ? `<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);margin-right:6px;white-space:nowrap;"><input type="checkbox" data-paga-team="${team}" data-paga-id="${p.id}" ${paga?'checked':''}> Paga${inBoth?' (ambos)':''}</label>` : ''}
           ${checked ? `<input type="number" inputmode="numeric" pattern="[0-9]*" class="goals-input" min="0" data-goals-team="${team}" data-goals-id="${p.id}" value="${goalsFor(team,p.id)}" placeholder="0">` : ''}
         </div>`;
