@@ -581,8 +581,9 @@ document.addEventListener('click', e=>{
   openEloInfo();
 }, true);
 // Panel "Elo ▾" plegable del partido: fuerza de cada equipo, probabilidad y equilibrio,
-// con el Elo de antes de `date`.
-function eloPanelHtml(verde, naranja, date){
+// con el Elo de antes de `date`. Si se pasa `played` (un partido ya guardado), añade
+// cuánto Elo ganó o perdió de media cada equipo en ese partido.
+function eloPanelHtml(verde, naranja, date, played){
   if(!verde.length || !naranja.length) return '<div class="elo-balance">Elige jugadores en los dos equipos.</div>';
   const { rV, rN, E } = eloWinProb(computeElo(date), verde, naranja);
   const pv = Math.round(E*100);
@@ -594,7 +595,20 @@ function eloPanelHtml(verde, naranja, date){
       <div class="elo-bar"><div style="width:${pv}%"></div></div>
       <div>Prob. de ganar: Verde ${pv}% · Naranja ${100-pv}%</div>
       <div style="margin-top:4px;">${eloBalanced(E) ? 'Partido equilibrado' : `Partido desequilibrado: favorito ${E > 0.5 ? 'Verde' : 'Naranja'}`}</div>
+      ${played ? eloResultLine(played) : ''}
     </div>`;
+}
+// "Elo ganado: Verde +16 · Naranja −16 (media por jugador)". Solo cuenta a los jugadores de
+// la plantilla que jugaron en un único equipo (los invitados no cambian su Elo).
+function eloResultLine(m){
+  const before = computeElo(m.date), after = computeElo(m.date, true);
+  const v = (m.verde||[]).map(x=>x.playerId), n = (m.naranja||[]).map(x=>x.playerId);
+  const avgDelta = (ids, other)=>{
+    const ds = ids.filter(id=> before[id] && !other.includes(id)).map(id=> after[id].rating - before[id].rating);
+    return ds.length ? ds.reduce((a,b)=>a+b,0) / ds.length : null;
+  };
+  const fmt = d=> d==null ? '–' : (Math.round(d) > 0 ? '+' : Math.round(d) < 0 ? '−' : '') + Math.abs(Math.round(d));
+  return `<div style="margin-top:4px;">Elo ganado: Verde ${fmt(avgDelta(v, n))} · Naranja ${fmt(avgDelta(n, v))} <span style="font-size:11px;">(media por jugador)</span></div>`;
 }
 const ELO_TOGGLE_HTML = `<div class="elo-toggle-row"><button class="elo-toggle" id="eloToggle">Elo <span class="chev">▾</span></button>${ELO_INFO_HTML}</div><div id="eloBalance" hidden></div>`;
 function bindEloToggle(update){
@@ -606,11 +620,11 @@ function bindEloToggle(update){
   };
 }
 // Devuelve { [playerId]: { rating, pj, history:[{date, rating}] } } solo para jugadores de la plantilla.
-// Con `before` solo cuenta los partidos anteriores a esa fecha.
-function computeElo(before){
+// Con `before` solo cuenta los partidos anteriores a esa fecha (o hasta ella, con `inclusive`).
+function computeElo(before, inclusive){
   const elo = {};
   players.forEach(p=>{ elo[p.id] = { rating: ELO.START, pj: 0, history: [] }; });
-  const sorted = matches.filter(m=> !before || (m.date||'') < before)
+  const sorted = matches.filter(m=> !before || (inclusive ? (m.date||'') <= before : (m.date||'') < before))
     .map((m,i)=>({m,i})).sort((a,b)=> (a.m.date||'').localeCompare(b.m.date||'') || a.i - b.i).map(x=>x.m);
 
   sorted.forEach(m=>{
@@ -908,7 +922,7 @@ function openMatchView(matchId){
   overlay.onclick = e=>{ if(e.target===overlay) overlay.remove(); };
   document.getElementById('closeViewBtn').onclick = ()=> overlay.remove();
   if(showElo()) bindEloToggle(()=>{
-    document.getElementById('eloBalance').innerHTML = eloPanelHtml((m.verde||[]).map(x=>x.playerId), (m.naranja||[]).map(x=>x.playerId), m.date);
+    document.getElementById('eloBalance').innerHTML = eloPanelHtml((m.verde||[]).map(x=>x.playerId), (m.naranja||[]).map(x=>x.playerId), m.date, m);
   });
 }
 
@@ -968,7 +982,8 @@ function openMatchForm(matchId){
   function updateEloBalance(){
     const box = document.getElementById('eloBalance');
     if(box.hidden) return;
-    box.innerHTML = eloPanelHtml(work.verde.map(x=>x.playerId), work.naranja.map(x=>x.playerId), document.getElementById('matchDate').value);
+    // Al editar un partido guardado, el "Elo ganado" es el del partido tal como está guardado.
+    box.innerHTML = eloPanelHtml(work.verde.map(x=>x.playerId), work.naranja.map(x=>x.playerId), document.getElementById('matchDate').value, editing ? match : null);
   }
   function renderPicker(team, containerId, countId){
     const container = document.getElementById(containerId);
