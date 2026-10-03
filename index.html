@@ -495,6 +495,72 @@ function calculaResultado(m){
   else { vRes='e'; nRes='e'; }
   return {v, n, vRes, nRes};
 }
+
+// ---------- Rating Elo ----------
+// Se calcula siempre al vuelo recorriendo los partidos en orden de fecha; no se
+// guarda nada en Firestore (todo es derivable de `matches`).
+//
+// Por partido:
+//   E     = 1 / (1 + 10^(-(Rverde - Rnaranja) / 400))   prob. de que gane verde
+//   S     = 1 gana verde, 0,5 empate, 0 gana naranja
+//   G     = 1 si dif <= 1; si no min(2, 1 + log8(dif))    peso por goleada
+//   F     = 2,2 / (0,001 * D + 2,2), D = ventaja de Elo del ganador antes del
+//           partido (en empate F = 1)
+//   K_i   = max(15, 100 / (n_i + 5)^0,5), n_i = partidos ya jugados por el jugador
+//   cambio del jugador i = K_i * G * F * (S - E)  (suma en verde, resta en naranja)
+// Rating de un equipo = media de sus jugadores. Los invitados y los jugadores
+// eliminados cuentan como ELO.START en la media, pero su rating no se actualiza.
+// Quien juega en los dos equipos recibe la mitad de cada lado (neto 0) y suma partido.
+//
+// TODO varias temporadas: hoy se recorren todos los partidos como una sola
+// temporada. Cuando haya varias, procesar temporada a temporada en orden y, al
+// empezar cada una (menos la primera), regresar cada rating a la media:
+//   R = 0,75 * R + 0,25 * ELO.START
+// El contador de partidos n (y por tanto K) NO se reinicia: cuenta toda la vida
+// del jugador.
+const ELO = { START:1000, SCALE:400, K_MIN:15, K_C:100, K_OFFSET:5, K_EXP:0.5, G_CAP:2, G_BASE:8, F_C:2.2, F_SLOPE:0.001 };
+function eloK(n){
+  return Math.max(ELO.K_MIN, ELO.K_C / Math.pow(n + ELO.K_OFFSET, ELO.K_EXP));
+}
+function eloGoleada(dif){
+  if(dif <= 1) return 1;
+  return Math.min(ELO.G_CAP, 1 + Math.log(dif) / Math.log(ELO.G_BASE));
+}
+// Devuelve { [playerId]: { rating, pj } } solo para jugadores de la plantilla.
+function computeElo(){
+  const elo = {};
+  players.forEach(p=>{ elo[p.id] = { rating: ELO.START, pj: 0 }; });
+  const ratingOf = id => elo[id] ? elo[id].rating : ELO.START;
+  const sorted = matches.map((m,i)=>({m,i})).sort((a,b)=> (a.m.date||'').localeCompare(b.m.date||'') || a.i - b.i).map(x=>x.m);
+
+  sorted.forEach(m=>{
+    const verde = (m.verde||[]).map(x=>x.playerId);
+    const naranja = (m.naranja||[]).map(x=>x.playerId);
+    if(!verde.length || !naranja.length) return;
+    const mean = ids => ids.reduce((s,id)=>s+ratingOf(id),0) / ids.length;
+    const rV = mean(verde), rN = mean(naranja);
+    const E = 1 / (1 + Math.pow(10, -(rV - rN) / ELO.SCALE));
+    const { v, n, vRes } = calculaResultado(m);
+    const S = vRes==='g' ? 1 : vRes==='e' ? 0.5 : 0;
+    const G = eloGoleada(Math.abs(v - n));
+    const dGanador = v > n ? rV - rN : v < n ? rN - rV : 0;
+    const F = v === n ? 1 : ELO.F_C / (ELO.F_SLOPE * dGanador + ELO.F_C);
+    const base = G * F * (S - E);
+
+    const inV = new Set(verde), inN = new Set(naranja);
+    const deltas = {};
+    new Set([...verde, ...naranja]).forEach(id=>{
+      if(!elo[id]) return; // invitado o jugador eliminado
+      if(inV.has(id) && inN.has(id)){ deltas[id] = 0; return; }
+      deltas[id] = eloK(elo[id].pj) * base * (inV.has(id) ? 1 : -1);
+    });
+    Object.keys(deltas).forEach(id=>{
+      elo[id].rating += deltas[id];
+      elo[id].pj++;
+    });
+  });
+  return elo;
+}
 function fmtDate(d){
   if(!d) return '';
   const dt = new Date(d+'T00:00:00');
