@@ -187,7 +187,7 @@ let courtPrices = []; // [{id, date, price}] historial de precios de la cancha
 let payments = []; // [{id, playerId, date, amount, note}] pagos recibidos
 let activeTab = 'partidos';
 let bubbleChart = null; // instancia viva del mapa de burbujas; se destruye antes de cada render
-let sortBy = 'pts'; // 'pts' o 'gf'
+let sortBy = 'pts'; // 'pts', 'gf' o 'elo'
 
 // Jugadores invitados: seleccionables en un partido, pero no forman parte
 // de la plantilla ni entran en la clasificación (ids fijos, fuera de Firestore).
@@ -1218,13 +1218,16 @@ function renderPagos(content){
 
 // ---------- Clasificación tab ----------
 function renderClasificacion(content){
-  const stats = computeStats();
   const elo = showElo() ? computeElo() : null;
+  if(sortBy==='elo' && !elo) sortBy = 'pts';
+  const stats = computeStats();
+  if(sortBy==='elo') stats.sort((a,b)=> elo[b.id].rating - elo[a.id].rating || b.pts - a.pts || a.name.localeCompare(b.name));
   content.innerHTML = `
     <div class="section-title">Clasificación general</div>
     <div class="row" style="gap:8px; margin-bottom:12px;">
       <div class="tab ${sortBy==='pts'?'active':''}" id="sortByPts" style="flex:1;">Por puntos</div>
       <div class="tab ${sortBy==='gf'?'active':''}" id="sortByGf" style="flex:1;">Por goles</div>
+      ${elo ? `<div class="tab ${sortBy==='elo'?'active':''}" id="sortByElo" style="flex:1;">Por Elo</div>` : ''}
     </div>
     <div id="rankingCapture">
       <div class="rank-title-strip">
@@ -1276,6 +1279,7 @@ function renderClasificacion(content){
   `;
   document.getElementById('sortByPts').onclick = ()=>{ sortBy='pts'; render(); };
   document.getElementById('sortByGf').onclick = ()=>{ sortBy='gf'; render(); };
+  if(elo) document.getElementById('sortByElo').onclick = ()=>{ sortBy='elo'; render(); };
   if(isAdmin){
     document.getElementById('exportJpgBtn').onclick = ()=> exportRanking('jpg');
     document.getElementById('exportPdfBtn').onclick = ()=> exportRanking('pdf');
