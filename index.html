@@ -1319,19 +1319,16 @@ function renderClasificacion(content){
       <canvas id="bubbleChart" style="display:block;"></canvas>
       <button id="bubbleResetBtn" title="Restablecer" style="position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:7px;border:1px solid var(--navy-mid);background:var(--white);color:var(--navy);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">⟲</button>
     </div>` : ''}
-    ${isAdmin ? `
     <div class="export-bar">
       <button class="btn-gold" id="exportJpgBtn" style="flex:1;">Exportar JPG</button>
       <button class="btn-gold" id="exportPdfBtn" style="flex:1;">Exportar PDF</button>
-    </div>` : ''}
+    </div>
   `;
   document.getElementById('sortByPts').onclick = ()=>{ sortBy='pts'; render(); };
   document.getElementById('sortByGf').onclick = ()=>{ sortBy='gf'; render(); };
   if(elo) document.getElementById('sortByElo').onclick = ()=>{ sortBy='elo'; render(); };
-  if(isAdmin){
-    document.getElementById('exportJpgBtn').onclick = ()=> exportRanking('jpg');
-    document.getElementById('exportPdfBtn').onclick = ()=> exportRanking('pdf');
-  }
+  document.getElementById('exportJpgBtn').onclick = ()=> exportRanking('jpg');
+  document.getElementById('exportPdfBtn').onclick = ()=> exportRanking('pdf');
   content.querySelectorAll('[data-stats-row]').forEach(row=>{
     row.onclick = ()=> openPlayerStats(row.dataset.id);
   });
