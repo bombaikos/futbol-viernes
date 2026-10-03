@@ -604,11 +604,11 @@ function bindEloToggle(update){
     update();
   };
 }
-// Devuelve { [playerId]: { rating, pj } } solo para jugadores de la plantilla.
+// Devuelve { [playerId]: { rating, pj, history:[{date, rating}] } } solo para jugadores de la plantilla.
 // Con `before` solo cuenta los partidos anteriores a esa fecha.
 function computeElo(before){
   const elo = {};
-  players.forEach(p=>{ elo[p.id] = { rating: ELO.START, pj: 0 }; });
+  players.forEach(p=>{ elo[p.id] = { rating: ELO.START, pj: 0, history: [] }; });
   const sorted = matches.filter(m=> !before || (m.date||'') < before)
     .map((m,i)=>({m,i})).sort((a,b)=> (a.m.date||'').localeCompare(b.m.date||'') || a.i - b.i).map(x=>x.m);
 
@@ -634,6 +634,7 @@ function computeElo(before){
     Object.keys(deltas).forEach(id=>{
       elo[id].rating += deltas[id];
       elo[id].pj++;
+      elo[id].history.push({ date: m.date, rating: elo[id].rating });
     });
   });
   return elo;
@@ -1430,6 +1431,7 @@ function openPlayerStats(playerId){
     document.getElementById('closeStatsBtn').onclick = ()=> overlay.remove();
     return;
   }
+  const eloP = showElo() ? computeElo()[playerId] : null;
   const efGoles = stats.gf/pj;
   const efPuntos = stats.pts/pj;
   const { timeline, goalsSeries, pointsSeries } = playerCumulativeSeries(playerId);
@@ -1464,6 +1466,9 @@ function openPlayerStats(playerId){
       <div class="card"><canvas id="chartGoals${playerId}" height="140"></canvas></div>
       <div class="section-title" style="color:var(--navy);font-size:14px;">🏆 Progresión de puntos (acumulado)</div>
       <div class="card"><canvas id="chartPoints${playerId}" height="140"></canvas></div>
+      ${eloP ? `
+      <div class="section-title" style="color:var(--navy);font-size:14px;">📈 Progresión del Elo ${ELO_INFO_HTML}</div>
+      <div class="card"><canvas id="chartElo${playerId}" height="140"></canvas></div>` : ''}
       <div style="text-align:center;font-size:12.5px;color:var(--muted);margin:4px 0 16px;">🟢 Verde: ${vCount} veces · 🟠 Naranja: ${nCount} veces</div>
       <button class="btn-ghost btn-block" id="closeStatsBtn">Cerrar</button>
     </div>`;
@@ -1551,6 +1556,21 @@ function openPlayerStats(playerId){
       options: chartOpts('Puntos acumulados'),
       plugins: [endLabelsPlugin]
     }));
+    if(eloP){
+      const eloSeries = [ELO.START, ...eloP.history.map(h=>Math.round(h.rating))];
+      const eloLabels = ['Inicio', ...eloP.history.map(h=> new Date(h.date+'T00:00:00').toLocaleDateString('es-ES', { day:'2-digit', month:'2-digit' }))];
+      const eloDatasets = makeDatasets(eloSeries, eloSeries.map(()=>ELO.START), p.name);
+      eloDatasets[0].fill = false;
+      eloDatasets[1].label = `Inicial (${ELO.START})`;
+      const eloOpts = chartOpts('Elo');
+      delete eloOpts.scales.y.min;
+      statCharts.push(new Chart(document.getElementById('chartElo'+playerId), {
+        type:'line',
+        data:{ labels: eloLabels, datasets: eloDatasets },
+        options: eloOpts,
+        plugins: [endLabelsPlugin]
+      }));
+    }
   }
   const closeStats = ()=>{ statCharts.forEach(c=>c.destroy()); overlay.remove(); };
   overlay.onclick = e=>{ if(e.target===overlay) closeStats(); };
