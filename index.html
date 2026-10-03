@@ -14,6 +14,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
 
 <!-- Firebase (compat SDK, sin build tools) -->
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
@@ -1104,8 +1106,9 @@ function renderClasificacion(content){
     })()}
     ${isAdmin ? `
     <div class="section-title" style="margin-top:26px;">Mapa de jugadores</div>
-    <div class="card" style="position:relative;">
-      <canvas id="bubbleChart" height="300"></canvas>
+    <div class="card" style="position:relative;height:300px;touch-action:none;">
+      <canvas id="bubbleChart" style="display:block;"></canvas>
+      <button id="bubbleResetBtn" title="Restablecer" style="position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:7px;border:1px solid var(--navy-mid);background:var(--white);color:var(--navy);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">⟲</button>
     </div>
     <div class="export-bar">
       <button class="btn-gold" id="exportJpgBtn" style="flex:1;">Exportar JPG</button>
@@ -1133,6 +1136,9 @@ function renderClasificacion(content){
     const nLabels = Math.max(1, Math.round(bubbleData.length * LABEL_FRACTION));
     const toLabel = new Set(bubbleData.slice().sort((a,b)=>b.pj-a.pj).slice(0,nLabels).map(d=>d.name));
 
+    const bubbleXMax = Math.max(...bubbleData.map(d=>d.x)) + 1;
+    const bubbleYMin = -0.5, bubbleYMax = Math.max(...bubbleData.map(d=>d.y)) + 1;
+
     bubbleChart = new Chart(document.getElementById('bubbleChart'), {
       type: 'bubble',
       data:{ datasets:[{
@@ -1142,8 +1148,11 @@ function renderClasificacion(content){
         borderWidth: 1.5
       }]},
       options:{
-        responsive: true, animation: false,
+        responsive: true, maintainAspectRatio:false, animation: false,
         layout:{ padding:{ top:16, bottom:12, left:8, right:16 } },
+        // Área de "acierto" más amplia que el radio dibujado, para no tener
+        // que ser milimétrico al tocar una burbuja (sobre todo con el dedo).
+        elements:{ point:{ hitRadius:10 } },
         plugins:{
           legend:{ display: false },
           tooltip:{
@@ -1152,11 +1161,18 @@ function renderClasificacion(content){
               title: ()=> '',
               label: (item)=>{ const d=bubbleData[item.dataIndex]; return `${d.name} · ${d.pj} PJ · ${item.parsed.x} goles · ${item.parsed.y} pts`; }
             }
+          },
+          zoom:{
+            // Sin tope en el eje X: se puede desplazar libremente en
+            // cualquier dirección. En Y sí se acota al rango real de datos.
+            limits:{ x:{ minRange: 2 }, y:{ min: bubbleYMin, max: bubbleYMax, minRange: 2 } },
+            pan:{ enabled:true, mode:'xy' },
+            zoom:{ wheel:{ enabled:true }, pinch:{ enabled:true }, mode:'xy' }
           }
         },
         scales:{
-          x:{ min:-0.3, title:{ display:true, text:'Goles', color:cssColor('--muted'), font:{size:10} }, ticks:{ color:cssColor('--muted'), font:{size:10}, callback:(v)=>v<0?'':v }, grid:{ color:cssColor('--navy-light') }, afterBuildTicks:(axis)=>{ if(!axis.ticks.some(t=>t.value===0)) axis.ticks.unshift({value:0}); } },
-          y:{ min:-0.5, title:{ display:true, text:'Puntos', color:cssColor('--muted'), font:{size:10} }, ticks:{ color:cssColor('--muted'), font:{size:10}, callback:(v)=>v<0?'':v }, grid:{ color:cssColor('--navy-light') }, afterBuildTicks:(axis)=>{ if(!axis.ticks.some(t=>t.value===0)) axis.ticks.unshift({value:0}); } }
+          x:{ min:-0.3, max: bubbleXMax, title:{ display:true, text:'Goles', color:cssColor('--muted'), font:{size:10} }, ticks:{ color:cssColor('--muted'), font:{size:10}, callback:(v)=>v<0?'':Math.round(v), precision:0 }, grid:{ color:cssColor('--navy-light') }, afterBuildTicks:(axis)=>{ if(axis.min<=0 && axis.max>=0 && !axis.ticks.some(t=>t.value===0)) axis.ticks.unshift({value:0}); } },
+          y:{ min: bubbleYMin, max: bubbleYMax, title:{ display:true, text:'Puntos', color:cssColor('--muted'), font:{size:10} }, ticks:{ color:cssColor('--muted'), font:{size:10}, callback:(v)=>v<0?'':Math.round(v), precision:0 }, grid:{ color:cssColor('--navy-light') }, afterBuildTicks:(axis)=>{ if(axis.min<=0 && axis.max>=0 && !axis.ticks.some(t=>t.value===0)) axis.ticks.unshift({value:0}); } }
         }
       },
       plugins:[{
@@ -1166,9 +1182,15 @@ function renderClasificacion(content){
           const meta = chart.getDatasetMeta(0);
           const FONT_SIZE=10, CHAR_W=5.5, LH=13, MAX_ITER=30;
           const chartArea = chart.chartArea;
+          // Solo etiquetamos burbujas que siguen dentro del área visible:
+          // si el zoom/pan las deja fuera, su etiqueta desaparece en vez de
+          // quedarse "colgada" con una línea estirándose hasta la nada.
           const labeled = bubbleData.map((d,i)=>({
             d, i, pt: meta.data[i], w: d.name.length*CHAR_W, h: LH
-          })).filter(l=> toLabel.has(l.d.name));
+          })).filter(l=> toLabel.has(l.d.name)
+            && l.pt.x >= chartArea.left && l.pt.x <= chartArea.right
+            && l.pt.y >= chartArea.top && l.pt.y <= chartArea.bottom
+          );
           labeled.forEach(l=>{
             const aboveY = l.pt.y - l.d.r - 8 - LH;
             l.lx = l.pt.x - l.w/2;
@@ -1200,6 +1222,9 @@ function renderClasificacion(content){
             if(!moved) break;
           }
           ctx.save();
+          ctx.beginPath();
+          ctx.rect(chartArea.left, chartArea.top, chartArea.right-chartArea.left, chartArea.bottom-chartArea.top);
+          ctx.clip();
           ctx.font=`600 ${FONT_SIZE}px DM Sans, sans-serif`;
           ctx.textBaseline='top';
           labeled.forEach(L=>{
@@ -1214,6 +1239,7 @@ function renderClasificacion(content){
         }
       }]
     });
+    document.getElementById('bubbleResetBtn').onclick = ()=> bubbleChart.resetZoom();
   }
 }
 
