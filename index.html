@@ -112,6 +112,9 @@
   .pick-row.checked{ background:var(--navy-light); }
   .pick-row input[type=checkbox]{ width:19px; height:19px; accent-color:var(--navy); flex-shrink:0; }
   .pick-row .pname{ flex:1; font-size:14.5px; }
+  .col-head{ display:flex; align-items:center; gap:10px; padding:0 6px 4px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; color:var(--muted); }
+  .col-head .pname{ flex:1; }
+  .col-head .elo-delta{ color:var(--muted); font-size:10.5px; font-weight:700; }
   .pick-row .goals-input{ width:60px; text-align:center; padding:6px; }
   .tag{ display:inline-block; font-size:10px; font-weight:600; background:var(--navy-light); color:var(--muted); padding:2px 7px; border-radius:5px; margin-left:6px; vertical-align:middle; }
   .elo-delta{ display:none; font-size:12px; font-weight:600; color:var(--muted); min-width:30px; text-align:right; }
@@ -921,6 +924,7 @@ function openMatchView(matchId){
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
   const deltas = showElo() ? eloMatchDeltas(m) : {};
+  const colHead = goalsWidth=> `<div class="col-head"><span class="pname"></span>${showElo() ? '<span class="elo-delta">Elo</span>' : ''}<span style="min-width:${goalsWidth};text-align:right;">Goles</span></div>`;
   const line = (team)=> (m[team]||[]).map(x=>{
     const p = findAnyPlayer(x.playerId);
     return `<div class="pick-row"><div class="pname">${escapeHtml(p?p.name:'(jugador eliminado)')}</div>${eloDeltaHtml(deltas[x.playerId])}<div style="font-weight:700;min-width:22px;text-align:right;">${x.goals}</div></div>`;
@@ -932,8 +936,10 @@ function openMatchView(matchId){
       <h2 class="sheet-title">${fmtDate(m.date)}</h2>
       <div class="card">
         <div class="team-select-header v"><div class="label">🟢 Equipo Verde</div><div class="team-total">${v}</div></div>
+        ${colHead('22px')}
         ${line('verde')}
         <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="team-total">${n}</div></div>
+        ${colHead('22px')}
         ${line('naranja')}
       </div>
       ${showElo() ? ELO_TOGGLE_HTML : ''}
@@ -1011,7 +1017,8 @@ function openMatchForm(matchId){
   function renderPicker(team, containerId, countId){
     const container = document.getElementById(containerId);
     const otherTeam = team==='verde'?'naranja':'verde';
-    container.innerHTML = players.slice().sort((a,b)=>a.name.localeCompare(b.name)).concat(GUESTS).map(p=>{
+    const head = work[team].length ? `<div class="col-head"><span class="pname"></span>${savedDeltas ? '<span class="elo-delta">Elo</span>' : ''}<span style="width:60px;text-align:center;">Goles</span></div>` : '';
+    container.innerHTML = head + players.slice().sort((a,b)=>a.name.localeCompare(b.name)).concat(GUESTS).map(p=>{
       const checked = isInTeam(team, p.id);
       const inBoth = isInTeam(otherTeam, p.id);
       const entry = work[team].find(x=>x.playerId===p.id);
