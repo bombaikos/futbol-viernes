@@ -117,7 +117,7 @@
   .elo-toggle-row{ display:flex; align-items:center; justify-content:center; gap:18px; margin-bottom:4px; }
   .info-dot{ position:relative; display:inline-flex; width:17px; height:17px; border-radius:50%; border:1px solid var(--muted); color:var(--muted); font:italic 700 10px Georgia, serif; align-items:center; justify-content:center; cursor:pointer; vertical-align:middle; text-transform:none; }
   .info-dot::after{ content:''; position:absolute; inset:-9px; } /* zona de toque más grande */
-  .export-no-elo .elo-col, .exporting .info-dot{ display:none; }
+  .exporting .info-dot{ display:none; }
   .elo-toggle{ display:block; margin:0; background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; padding:6px 10px; font-family:inherit; }
   .elo-toggle .chev{ display:inline-block; transition:transform .15s ease; }
   .elo-toggle.open .chev{ transform:rotate(180deg); }
@@ -1581,8 +1581,7 @@ function openPlayerStats(playerId){
 async function exportRanking(type){
   const node = document.getElementById('rankingCapture');
   showToast('Generando…');
-  // La imagen exportada es para el grupo: sin Elo hasta que sea público, y sin la ⓘ.
-  if(matches.length < PUBLIC_ELO_FROM) node.classList.add('export-no-elo');
+  // La ⓘ no pinta nada en una imagen.
   node.classList.add('exporting');
   try{
     const canvas = await html2canvas(node, { scale:2, backgroundColor:'#ffffff' });
@@ -1604,7 +1603,7 @@ async function exportRanking(type){
   }catch(e){
     showToast('Error al exportar');
   }finally{
-    node.classList.remove('export-no-elo', 'exporting');
+    node.classList.remove('exporting');
   }
 }
 
