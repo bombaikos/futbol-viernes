@@ -1268,7 +1268,7 @@ function renderClasificacion(content){
     })()}
     ${showCharts() ? `
     <div class="section-title" style="margin-top:26px;">Mapa de jugadores</div>
-    <div class="card" style="position:relative;height:300px;touch-action:none;">
+    <div class="card" style="position:relative;height:360px;padding:4px;touch-action:none;">
       <canvas id="bubbleChart" style="display:block;"></canvas>
       <button id="bubbleResetBtn" title="Restablecer" style="position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:7px;border:1px solid var(--navy-mid);background:var(--white);color:var(--navy);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">⟲</button>
     </div>` : ''}
@@ -1313,7 +1313,7 @@ function renderClasificacion(content){
       }]},
       options:{
         responsive: true, maintainAspectRatio:false, animation: false,
-        layout:{ padding:{ top:16, bottom:12, left:8, right:16 } },
+        layout:{ padding:{ top:14, bottom:2, left:0, right:10 } },
         // Área de "acierto" más amplia que el radio dibujado, para no tener
         // que ser milimétrico al tocar una burbuja (sobre todo con el dedo).
         elements:{ point:{ hitRadius:10 } },
