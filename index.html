@@ -114,8 +114,10 @@
   .pick-row .pname{ flex:1; font-size:14.5px; }
   .pick-row .goals-input{ width:60px; text-align:center; padding:6px; }
   .tag{ display:inline-block; font-size:10px; font-weight:600; background:var(--navy-light); color:var(--muted); padding:2px 7px; border-radius:5px; margin-left:6px; vertical-align:middle; }
-  .elo-toggle{ display:block; margin:14px auto 0; background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; padding:6px 10px; }
-  .elo-balance{ font-size:12.5px; color:var(--muted); border:1px solid var(--navy-light); border-radius:8px; padding:10px 12px; margin-top:6px; }
+  .elo-toggle{ display:block; margin:0 auto 4px; background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; padding:6px 10px; font-family:inherit; }
+  .elo-toggle .chev{ display:inline-block; transition:transform .15s ease; }
+  .elo-toggle.open .chev{ transform:rotate(180deg); }
+  .elo-balance{ font-size:12.5px; color:var(--muted); border:1px solid var(--navy-light); border-radius:8px; padding:10px 12px; margin-bottom:12px; }
   .elo-bar{ height:8px; border-radius:4px; background:#F2994A; overflow:hidden; margin-bottom:7px; }
   .elo-bar > div{ height:100%; background:#27AE60; }
   .tip-box{ font-size:12.5px; color:var(--navy); background:var(--navy-light); border-radius:8px; padding:11px 13px; margin-top:12px; }
@@ -542,6 +544,31 @@ function eloWinProb(elo, verde, naranja){
   return { rV, rN, E: 1 / (1 + Math.pow(10, -(rV - rN) / ELO.SCALE)) };
 }
 const eloBalanced = E => E >= 0.45 && E <= 0.55;
+// Panel "Elo ▾" plegable del partido: fuerza de cada equipo, probabilidad y equilibrio,
+// con el Elo de antes de `date`.
+function eloPanelHtml(verde, naranja, date){
+  if(!verde.length || !naranja.length) return '<div class="elo-balance">Elige jugadores en los dos equipos.</div>';
+  const { rV, rN, E } = eloWinProb(computeElo(date), verde, naranja);
+  const pv = Math.round(E*100);
+  return `<div class="elo-balance">
+      <div class="row" style="justify-content:space-between;margin-bottom:6px;">
+        <span>Fuerza Elo 🟢 Verde: <b>${Math.round(rV)}</b></span>
+        <span>🟠 Naranja: <b>${Math.round(rN)}</b></span>
+      </div>
+      <div class="elo-bar"><div style="width:${pv}%"></div></div>
+      <div>Prob. de ganar: Verde ${pv}% · Naranja ${100-pv}%</div>
+      <div style="margin-top:4px;">${eloBalanced(E) ? 'Partido equilibrado' : `Partido desequilibrado: favorito ${E > 0.5 ? 'Verde' : 'Naranja'}`}</div>
+    </div>`;
+}
+const ELO_TOGGLE_HTML = '<button class="elo-toggle" id="eloToggle">Elo <span class="chev">▾</span></button><div id="eloBalance" hidden></div>';
+function bindEloToggle(update){
+  document.getElementById('eloToggle').onclick = ()=>{
+    const box = document.getElementById('eloBalance');
+    box.hidden = !box.hidden;
+    document.getElementById('eloToggle').classList.toggle('open', !box.hidden);
+    update();
+  };
+}
 // Devuelve { [playerId]: { rating, pj } } solo para jugadores de la plantilla.
 // Con `before` solo cuenta los partidos anteriores a esa fecha.
 function computeElo(before){
@@ -836,12 +863,16 @@ function openMatchView(matchId){
         <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="team-total">${n}</div></div>
         ${line('naranja')}
       </div>
+      ${ELO_TOGGLE_HTML}
       ${petosName ? `<div class="viewer-note">${petosIcon('var(--navy)')} Petos: ${escapeHtml(petosName)}</div>` : ''}
       <button class="btn-ghost btn-block" id="closeViewBtn">Cerrar</button>
     </div>`;
   document.body.appendChild(overlay);
   overlay.onclick = e=>{ if(e.target===overlay) overlay.remove(); };
   document.getElementById('closeViewBtn').onclick = ()=> overlay.remove();
+  bindEloToggle(()=>{
+    document.getElementById('eloBalance').innerHTML = eloPanelHtml((m.verde||[]).map(x=>x.playerId), (m.naranja||[]).map(x=>x.playerId), m.date);
+  });
 }
 
 function openMatchForm(matchId){
@@ -868,6 +899,7 @@ function openMatchForm(matchId){
         <div id="pickNaranja"></div>
         <div class="tip-box">💡 Puedes alinear al mismo jugador en los dos equipos si cambia de bando a mitad de partido para equilibrarlo.</div>
       </div>
+      ${ELO_TOGGLE_HTML}
       <div class="card">
         <label style="font-size:12.5px;color:var(--muted);font-weight:600;">¿Quién se lleva los petos?</label>
         <div style="font-size:12px;color:var(--muted);margin:2px 0 6px;">Solo se puede elegir entre quienes juegan este partido.</div>
@@ -878,8 +910,6 @@ function openMatchForm(matchId){
         <button class="btn-ghost" id="cancelMatchBtn">Cancelar</button>
         <button class="btn-primary" id="saveMatchBtn">Guardar</button>
       </div>
-      <button class="elo-toggle" id="eloToggle">Elo…</button>
-      <div id="eloBalance" hidden></div>
     </div>`;
   document.body.appendChild(overlay);
 
@@ -898,23 +928,10 @@ function openMatchForm(matchId){
       candidates.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
     sel.value = candidates.some(p=>p.id===prevValue) ? prevValue : '';
   }
-  // Equilibrio según el Elo de antes de la fecha del partido. Plegado por defecto.
   function updateEloBalance(){
     const box = document.getElementById('eloBalance');
     if(box.hidden) return;
-    const verde = work.verde.map(x=>x.playerId), naranja = work.naranja.map(x=>x.playerId);
-    if(!verde.length || !naranja.length){ box.innerHTML = '<div class="elo-balance">Elige jugadores en los dos equipos.</div>'; return; }
-    const { rV, rN, E } = eloWinProb(computeElo(document.getElementById('matchDate').value), verde, naranja);
-    const pv = Math.round(E*100), ok = eloBalanced(E);
-    box.innerHTML = `<div class="elo-balance">
-        <div class="row" style="justify-content:space-between;margin-bottom:6px;">
-          <span>Fuerza Elo 🟢 Verde: <b>${Math.round(rV)}</b></span>
-          <span>🟠 Naranja: <b>${Math.round(rN)}</b></span>
-        </div>
-        <div class="elo-bar"><div style="width:${pv}%"></div></div>
-        <div>Prob. de ganar: Verde ${pv}% · Naranja ${100-pv}%</div>
-        <div style="margin-top:6px;font-weight:700;color:${ok?'#1E7A3C':'#A85A10'};">${ok ? '✔ Partido equilibrado' : `⚠ Desequilibrado: favorito ${E > 0.5 ? 'Verde' : 'Naranja'}`}</div>
-      </div>`;
+    box.innerHTML = eloPanelHtml(work.verde.map(x=>x.playerId), work.naranja.map(x=>x.playerId), document.getElementById('matchDate').value);
   }
   function renderPicker(team, containerId, countId){
     const container = document.getElementById(containerId);
@@ -973,11 +990,7 @@ function openMatchForm(matchId){
   renderPicker('verde','pickVerde','countVerde');
   renderPicker('naranja','pickNaranja','countNaranja');
   document.getElementById('matchDate').onchange = updateEloBalance;
-  document.getElementById('eloToggle').onclick = ()=>{
-    const box = document.getElementById('eloBalance');
-    box.hidden = !box.hidden;
-    updateEloBalance();
-  };
+  bindEloToggle(updateEloBalance);
 
   document.getElementById('cancelMatchBtn').onclick = ()=> overlay.remove();
   overlay.onclick = e=>{ if(e.target===overlay) overlay.remove(); };
