@@ -114,7 +114,10 @@
   .pick-row .pname{ flex:1; font-size:14.5px; }
   .pick-row .goals-input{ width:60px; text-align:center; padding:6px; }
   .tag{ display:inline-block; font-size:10px; font-weight:600; background:var(--navy-light); color:var(--muted); padding:2px 7px; border-radius:5px; margin-left:6px; vertical-align:middle; }
-  .elo-toggle{ display:block; margin:0 auto 4px; background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; padding:6px 10px; font-family:inherit; }
+  .elo-toggle-row{ display:flex; align-items:center; justify-content:center; gap:2px; margin-bottom:4px; }
+  .info-dot{ display:inline-flex; width:15px; height:15px; border-radius:50%; border:1px solid var(--muted); color:var(--muted); font:italic 700 10px Georgia, serif; align-items:center; justify-content:center; cursor:pointer; vertical-align:middle; text-transform:none; }
+  .export-no-elo .elo-col, .exporting .info-dot{ display:none; }
+  .elo-toggle{ display:block; margin:0; background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; padding:6px 10px; font-family:inherit; }
   .elo-toggle .chev{ display:inline-block; transition:transform .15s ease; }
   .elo-toggle.open .chev{ transform:rotate(180deg); }
   .elo-balance{ font-size:12.5px; color:var(--muted); border:1px solid var(--navy-light); border-radius:8px; padding:10px 12px; margin-bottom:12px; }
@@ -544,6 +547,36 @@ function eloWinProb(elo, verde, naranja){
   return { rV, rN, E: 1 / (1 + Math.pow(10, -(rV - rN) / ELO.SCALE)) };
 }
 const eloBalanced = E => E >= 0.45 && E <= 0.55;
+// El admin lo ve todo; el público ve el mapa y las gráficas desde 5 partidos y el Elo desde 10.
+const PUBLIC_CHARTS_FROM = 5, PUBLIC_ELO_FROM = 10;
+const showCharts = ()=> isAdmin || matches.length >= PUBLIC_CHARTS_FROM;
+const showElo = ()=> isAdmin || matches.length >= PUBLIC_ELO_FROM;
+const ELO_INFO_HTML = '<span class="info-dot" data-elo-info title="¿Qué es el Elo?">i</span>';
+function openEloInfo(){
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <h2 class="sheet-title">¿Qué es el Elo?</h2>
+      <div class="card" style="font-size:14px;line-height:1.5;">
+        Es un sistema de puntuación como el que usan el ranking FIFA de selecciones o el ajedrez.
+        Todos empiezan con 1000. Ganar suma puntos y perder resta, pero no todas las victorias valen igual:
+        ganar a un rival más fuerte da más puntos, y ganar por goleada también.<br><br>
+        La fuerza de un equipo es la media del Elo de sus jugadores, y con ella se calcula la probabilidad de ganar.
+      </div>
+      <button class="btn-ghost btn-block" id="closeEloInfo">Cerrar</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = ()=> overlay.remove();
+  overlay.onclick = e=>{ if(e.target===overlay) close(); };
+  overlay.querySelector('#closeEloInfo').onclick = close;
+}
+document.addEventListener('click', e=>{
+  if(!e.target.closest('[data-elo-info]')) return;
+  e.stopPropagation();
+  openEloInfo();
+}, true);
 // Panel "Elo ▾" plegable del partido: fuerza de cada equipo, probabilidad y equilibrio,
 // con el Elo de antes de `date`.
 function eloPanelHtml(verde, naranja, date){
@@ -560,7 +593,7 @@ function eloPanelHtml(verde, naranja, date){
       <div style="margin-top:4px;">${eloBalanced(E) ? 'Partido equilibrado' : `Partido desequilibrado: favorito ${E > 0.5 ? 'Verde' : 'Naranja'}`}</div>
     </div>`;
 }
-const ELO_TOGGLE_HTML = '<button class="elo-toggle" id="eloToggle">Elo <span class="chev">▾</span></button><div id="eloBalance" hidden></div>';
+const ELO_TOGGLE_HTML = `<div class="elo-toggle-row"><button class="elo-toggle" id="eloToggle">Elo <span class="chev">▾</span></button>${ELO_INFO_HTML}</div><div id="eloBalance" hidden></div>`;
 function bindEloToggle(update){
   document.getElementById('eloToggle').onclick = ()=>{
     const box = document.getElementById('eloBalance');
@@ -863,14 +896,14 @@ function openMatchView(matchId){
         <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="team-total">${n}</div></div>
         ${line('naranja')}
       </div>
-      ${ELO_TOGGLE_HTML}
+      ${showElo() ? ELO_TOGGLE_HTML : ''}
       ${petosName ? `<div class="viewer-note">${petosIcon('var(--navy)')} Petos: ${escapeHtml(petosName)}</div>` : ''}
       <button class="btn-ghost btn-block" id="closeViewBtn">Cerrar</button>
     </div>`;
   document.body.appendChild(overlay);
   overlay.onclick = e=>{ if(e.target===overlay) overlay.remove(); };
   document.getElementById('closeViewBtn').onclick = ()=> overlay.remove();
-  bindEloToggle(()=>{
+  if(showElo()) bindEloToggle(()=>{
     document.getElementById('eloBalance').innerHTML = eloPanelHtml((m.verde||[]).map(x=>x.playerId), (m.naranja||[]).map(x=>x.playerId), m.date);
   });
 }
@@ -1184,6 +1217,7 @@ function renderPagos(content){
 // ---------- Clasificación tab ----------
 function renderClasificacion(content){
   const stats = computeStats();
+  const elo = showElo() ? computeElo() : null;
   content.innerHTML = `
     <div class="section-title">Clasificación general</div>
     <div class="row" style="gap:8px; margin-bottom:12px;">
@@ -1197,14 +1231,15 @@ function renderClasificacion(content){
       </div>
       ${stats.length===0 ? '<div class="empty"><div class="big">🏆</div>Todavía no hay estadísticas.</div>' : `
       <table class="rank">
-        <thead><tr><th></th><th class="left">Jugador</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>GF</th><th>Pts</th></tr></thead>
+        <thead><tr><th></th><th class="left">Jugador</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>GF</th><th>Pts</th>${elo ? `<th class="elo-col">Elo ${ELO_INFO_HTML}</th>` : ''}</tr></thead>
         <tbody>
           ${stats.map((s,i)=>`
-            <tr ${isAdmin?`data-stats-row data-id="${s.id}" style="cursor:pointer;"`:''}>
+            <tr ${showCharts()?`data-stats-row data-id="${s.id}" style="cursor:pointer;"`:''}>
               <td><span class="pos ${i===0?'g1':i===1?'g2':i===2?'g3':''}">${i+1}</span></td>
               <td class="left">${escapeHtml(s.name)}</td>
               <td>${s.pj}</td><td>${s.g}</td><td>${s.e}</td><td>${s.p}</td><td class="gf">${s.gf}</td>
               <td class="pts">${s.pts}</td>
+              ${elo ? `<td class="elo-col">${Math.round(elo[s.id].rating)}</td>` : ''}
             </tr>`).join('')}
         </tbody>
       </table>`}
@@ -1225,12 +1260,13 @@ function renderClasificacion(content){
         </table>
       </div>`;
     })()}
-    ${isAdmin ? `
+    ${showCharts() ? `
     <div class="section-title" style="margin-top:26px;">Mapa de jugadores</div>
     <div class="card" style="position:relative;height:300px;touch-action:none;">
       <canvas id="bubbleChart" style="display:block;"></canvas>
       <button id="bubbleResetBtn" title="Restablecer" style="position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:7px;border:1px solid var(--navy-mid);background:var(--white);color:var(--navy);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">⟲</button>
-    </div>
+    </div>` : ''}
+    ${isAdmin ? `
     <div class="export-bar">
       <button class="btn-gold" id="exportJpgBtn" style="flex:1;">Exportar JPG</button>
       <button class="btn-gold" id="exportPdfBtn" style="flex:1;">Exportar PDF</button>
@@ -1241,12 +1277,12 @@ function renderClasificacion(content){
   if(isAdmin){
     document.getElementById('exportJpgBtn').onclick = ()=> exportRanking('jpg');
     document.getElementById('exportPdfBtn').onclick = ()=> exportRanking('pdf');
-    content.querySelectorAll('[data-stats-row]').forEach(row=>{
-      row.onclick = ()=> openPlayerStats(row.dataset.id);
-    });
   }
+  content.querySelectorAll('[data-stats-row]').forEach(row=>{
+    row.onclick = ()=> openPlayerStats(row.dataset.id);
+  });
 
-  if(isAdmin && window.Chart && stats.length > 0){
+  if(showCharts() && window.Chart && stats.length > 0){
     const maxPj = Math.max(...stats.map(s=>s.pj), 1);
     const bubbleData = stats.map(s=>({
       x: s.gf, y: s.pts,
@@ -1518,6 +1554,9 @@ function openPlayerStats(playerId){
 async function exportRanking(type){
   const node = document.getElementById('rankingCapture');
   showToast('Generando…');
+  // La imagen exportada es para el grupo: sin Elo hasta que sea público, y sin la ⓘ.
+  if(matches.length < PUBLIC_ELO_FROM) node.classList.add('export-no-elo');
+  node.classList.add('exporting');
   try{
     const canvas = await html2canvas(node, { scale:2, backgroundColor:'#ffffff' });
     if(type==='jpg'){
@@ -1537,6 +1576,8 @@ async function exportRanking(type){
     showToast('Exportado');
   }catch(e){
     showToast('Error al exportar');
+  }finally{
+    node.classList.remove('export-no-elo', 'exporting');
   }
 }
 
