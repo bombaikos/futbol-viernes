@@ -500,8 +500,10 @@ function computeStats(){
   );
 }
 function matchScore(m){
-  const v = (m.verde||[]).reduce((s,x)=>s+(Number(x.goals)||0),0);
-  const n = (m.naranja||[]).reduce((s,x)=>s+(Number(x.goals)||0),0);
+  // Los goles en propia puerta (m.ogVerde / m.ogNaranja = los que marca cada equipo
+  // en su propia portería) suman al rival sin atribuirse a ningún jugador.
+  const v = (m.verde||[]).reduce((s,x)=>s+(Number(x.goals)||0),0) + (Number(m.ogNaranja)||0);
+  const n = (m.naranja||[]).reduce((s,x)=>s+(Number(x.goals)||0),0) + (Number(m.ogVerde)||0);
   return {v,n};
 }
 function calculaResultado(m){
@@ -929,6 +931,7 @@ function openMatchView(matchId){
     const p = findAnyPlayer(x.playerId);
     return `<div class="pick-row"><div class="pname">${escapeHtml(p?p.name:'(jugador eliminado)')}</div>${eloDeltaHtml(deltas[x.playerId])}<div style="font-weight:700;min-width:22px;text-align:right;">${x.goals}</div></div>`;
   }).join('');
+  const ogLine = og=> Number(og) > 0 ? `<div class="pick-row"><div class="pname">En propia puerta</div><div style="font-weight:700;min-width:22px;text-align:right;">${Number(og)}</div></div>` : '';
   const petosName = m.petos ? (findAnyPlayer(m.petos)?.name || '(jugador eliminado)') : null;
   overlay.innerHTML = `
     <div class="sheet">
@@ -938,9 +941,11 @@ function openMatchView(matchId){
         <div class="team-select-header v"><div class="label">🟢 Equipo Verde</div><div class="team-total">${v}</div></div>
         ${colHead('22px')}
         ${line('verde')}
+        ${ogLine(m.ogVerde)}
         <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="team-total">${n}</div></div>
         ${colHead('22px')}
         ${line('naranja')}
+        ${ogLine(m.ogNaranja)}
       </div>
       ${showElo() ? ELO_TOGGLE_HTML : ''}
       ${petosName ? `<div class="viewer-note">${petosIcon('var(--navy)')} Petos: ${escapeHtml(petosName)}</div>` : ''}
@@ -975,8 +980,10 @@ function openMatchForm(matchId){
       <div class="card">
         <div class="team-select-header v"><div class="label">🟢 Equipo Verde</div><div class="row" style="gap:10px;"><div class="team-total" id="totalVerde">0</div><div class="team-count" id="countVerde">0/6</div></div></div>
         <div id="pickVerde"></div>
+        <div class="pick-row og-row"><div class="pname">En propia puerta <span style="font-size:11px;color:var(--muted);">(suma al rival)</span></div><input type="number" inputmode="numeric" pattern="[0-9]*" class="goals-input" min="0" id="ogVerde" value="${Number(work.ogVerde)||''}" placeholder="0"></div>
         <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="row" style="gap:10px;"><div class="team-total" id="totalNaranja">0</div><div class="team-count" id="countNaranja">0/6</div></div></div>
         <div id="pickNaranja"></div>
+        <div class="pick-row og-row"><div class="pname">En propia puerta <span style="font-size:11px;color:var(--muted);">(suma al rival)</span></div><input type="number" inputmode="numeric" pattern="[0-9]*" class="goals-input" min="0" id="ogNaranja" value="${Number(work.ogNaranja)||''}" placeholder="0"></div>
         <div class="tip-box">💡 Puedes alinear al mismo jugador en los dos equipos si cambia de bando a mitad de partido para equilibrarlo.</div>
       </div>
       ${ELO_TOGGLE_HTML}
@@ -996,7 +1003,7 @@ function openMatchForm(matchId){
   function isInTeam(team, id){ return work[team].some(x=>x.playerId===id); }
   function goalsFor(team, id){ const x = work[team].find(x=>x.playerId===id); return (x && x.goals) ? x.goals : ''; }
   function updateTotal(team, totalId){
-    const sum = work[team].reduce((s,x)=>s+(Number(x.goals)||0),0);
+    const sum = work[team].reduce((s,x)=>s+(Number(x.goals)||0),0) + (Number(team==='verde' ? work.ogNaranja : work.ogVerde)||0);
     document.getElementById(totalId).textContent = sum;
   }
   function renderPetosOptions(){
@@ -1072,6 +1079,16 @@ function openMatchForm(matchId){
   }
   renderPicker('verde','pickVerde','countVerde');
   renderPicker('naranja','pickNaranja','countNaranja');
+  ['ogVerde','ogNaranja'].forEach(key=>{
+    const input = document.getElementById(key);
+    input.oninput = ()=>{
+      const clean = input.value.replace(/[^0-9]/g, '');
+      if(clean !== input.value) input.value = clean;
+      work[key] = Number(clean)||0;
+      updateTotal('verde','totalVerde');
+      updateTotal('naranja','totalNaranja');
+    };
+  });
   document.getElementById('matchDate').onchange = updateEloBalance;
   bindEloToggle(updateEloBalance);
 
@@ -1095,6 +1112,8 @@ function openMatchForm(matchId){
     if(work.naranja.length < 5 || work.naranja.length > 6){ showToast('El equipo Naranja necesita 5 o 6 jugadores'); return; }
     work.verde = work.verde.map(x=>({ playerId:x.playerId, goals: Number(x.goals)||0, ...(isGuestId(x.playerId) ? {paga: x.paga!==false} : {}) }));
     work.naranja = work.naranja.map(x=>({ playerId:x.playerId, goals: Number(x.goals)||0, ...(isGuestId(x.playerId) ? {paga: x.paga!==false} : {}) }));
+    work.ogVerde = Number(work.ogVerde)||0;
+    work.ogNaranja = Number(work.ogNaranja)||0;
     work.petos = document.getElementById('petosSelect').value || null;
     await saveMatchDoc(work);
     overlay.remove();
