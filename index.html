@@ -795,7 +795,7 @@ function renderJugadores(content){
           <div class="player-row" data-id="${p.id}" data-open-history style="cursor:pointer;">
             <div class="player-name" style="flex:1;">${escapeHtml(p.name)}</div>
             <div style="min-width:64px;text-align:right;font-weight:800;font-size:13.5px;padding:3px 7px;border-radius:6px;${low?'background:var(--danger-soft);color:var(--danger);':'color:var(--navy);'}">${saldo.toFixed(2)}€</div>
-            <div style="width:52px;display:flex;align-items:center;justify-content:center;gap:4px;">${petosIcon('#6B7383')}<span class="pos">${petosCount}</span></div>
+            <div style="width:52px;display:flex;align-items:center;justify-content:center;gap:4px;">${petosCount>0 ? `${petosIcon('#6B7383')}<span class="pos">${petosCount}</span>` : ''}</div>
             ${isAdmin ? `
             <div class="row" data-action-group>
               <button class="icon-btn" data-action="edit" data-id="${p.id}">✎</button>
@@ -931,7 +931,10 @@ function openMatchView(matchId){
     const p = findAnyPlayer(x.playerId);
     return `<div class="pick-row"><div class="pname">${escapeHtml(p?p.name:'(jugador eliminado)')}</div>${eloDeltaHtml(deltas[x.playerId])}<div style="font-weight:700;min-width:22px;text-align:right;">${x.goals}</div></div>`;
   }).join('');
-  const ogLine = og=> Number(og) > 0 ? `<div class="pick-row"><div class="pname">En propia puerta</div><div style="font-weight:700;min-width:22px;text-align:right;">${Number(og)}</div></div>` : '';
+  // Un gol en propia puerta se muestra en el equipo al que suma (el rival del que
+  // lo marcó), igual que en el marcador. m.ogVerde = los que ha metido el Verde en
+  // su propia portería → suman al Naranja, y viceversa.
+  const ogLine = (og, from)=> Number(og) > 0 ? `<div class="pick-row"><div class="pname">En propia puerta <span style="font-size:11px;color:var(--muted);">(del ${from})</span></div><div style="font-weight:700;min-width:22px;text-align:right;">${Number(og)}</div></div>` : '';
   const petosName = m.petos ? (findAnyPlayer(m.petos)?.name || '(jugador eliminado)') : null;
   overlay.innerHTML = `
     <div class="sheet">
@@ -941,11 +944,11 @@ function openMatchView(matchId){
         <div class="team-select-header v"><div class="label">🟢 Equipo Verde</div><div class="team-total">${v}</div></div>
         ${colHead('22px')}
         ${line('verde')}
-        ${ogLine(m.ogVerde)}
+        ${ogLine(m.ogNaranja, 'Naranja')}
         <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="team-total">${n}</div></div>
         ${colHead('22px')}
         ${line('naranja')}
-        ${ogLine(m.ogNaranja)}
+        ${ogLine(m.ogVerde, 'Verde')}
       </div>
       ${showElo() ? ELO_TOGGLE_HTML : ''}
       ${petosName ? `<div class="viewer-note">${petosIcon('var(--navy)')} Petos: ${escapeHtml(petosName)}</div>` : ''}
@@ -1395,7 +1398,7 @@ function renderClasificacion(content){
           zoom:{
             // Sin tope en el eje X: se puede desplazar libremente en
             // cualquier dirección. En Y sí se acota al rango real de datos.
-            limits:{ x:{ minRange: 2 }, y:{ min: bubbleYMin, max: bubbleYMax, minRange: 2 } },
+            limits:{ x:{ minRange: 2 }, y:{ minRange: 2 } },
             pan:{ enabled:true, mode:'xy' },
             zoom:{ wheel:{ enabled:true }, pinch:{ enabled:true }, mode:'xy' }
           }
