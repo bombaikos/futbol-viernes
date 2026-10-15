@@ -795,7 +795,7 @@ function renderJugadores(content){
           <div class="player-row" data-id="${p.id}" data-open-history style="cursor:pointer;">
             <div class="player-name" style="flex:1;">${escapeHtml(p.name)}</div>
             <div style="min-width:64px;text-align:right;font-weight:800;font-size:13.5px;padding:3px 7px;border-radius:6px;${low?'background:var(--danger-soft);color:var(--danger);':'color:var(--navy);'}">${saldo.toFixed(2)}€</div>
-            <div style="width:52px;display:flex;align-items:center;justify-content:center;gap:4px;">${petosCount>0 ? `${petosIcon('#6B7383')}<span class="pos">${petosCount}</span>` : ''}</div>
+            <div style="min-width:68px;display:flex;align-items:center;justify-content:center;gap:2px;" ${petosCount>0?`title="Petos: ${petosCount}"`:''}>${petosIcon('#6B7383').repeat(petosCount)}</div>
             ${isAdmin ? `
             <div class="row" data-action-group>
               <button class="icon-btn" data-action="edit" data-id="${p.id}">✎</button>
