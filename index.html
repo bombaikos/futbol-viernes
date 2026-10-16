@@ -33,9 +33,17 @@
     --muted:      hsl(var(--hue), 10%, 46%);
     --danger: #C0392B;
     --danger-soft: #FBEAEA;
+    /* tipografía y espaciado compartidos por todos los listados */
+    --fs-row:15px;      /* texto principal de una fila (nombre) */
+    --fs-small:12px;    /* notas, leyendas, texto secundario */
+    --fs-head:10.5px;   /* cabeceras de columna */
+    --fw-num:700;       /* cifras en listados */
+    --row-pad:11px;     /* relleno vertical de fila */
+    --gap-section:24px; /* separación entre secciones */
+    --lh:1.35;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  body{ margin:0; background:var(--white); color:var(--navy); font-family:'DM Sans',sans-serif; -webkit-font-smoothing:antialiased; }
+  body{ margin:0; background:var(--white); color:var(--navy); font-family:'DM Sans',sans-serif; -webkit-font-smoothing:antialiased; line-height:var(--lh); }
   h1,h2,h3{ font-family:'DM Sans',sans-serif; font-weight:800; letter-spacing:0.01em; }
   #app{max-width:720px;margin:0 auto;min-height:100vh;background:var(--white);}
 
@@ -54,7 +62,13 @@
   .tab.active{ background:var(--navy); color:#fff; border-color:var(--navy); }
 
   .content{ padding:22px 16px 90px; }
-  .section-title{ font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); margin:0 0 12px; }
+  .section-title{ font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); margin:var(--gap-section) 0 12px; }
+  .section-title:first-child{ margin-top:0; }
+  .section-title.sub{ color:var(--navy); font-size:14px; }
+  .note{ font-size:var(--fs-small); color:var(--muted); }
+  .num{ font-weight:var(--fw-num); font-variant-numeric:tabular-nums; }
+  .num.neg{ color:var(--danger); }
+  .stat-label{ font-size:var(--fs-small); color:var(--muted); font-weight:700; text-transform:uppercase; }
 
   .card{ background:var(--white); border:1.5px solid var(--navy-mid); border-radius:10px; padding:16px; margin-bottom:12px; }
   .row{ display:flex; align-items:center; gap:10px; }
@@ -81,9 +95,9 @@
   .btn-block{ width:100%; }
   .icon-btn{ background:none; border:none; color:var(--muted); font-size:16px; padding:4px 8px; cursor:pointer; }
 
-  .player-row{ display:flex; align-items:center; justify-content:space-between; padding:11px 4px; border-bottom:1px solid var(--navy-mid); }
+  .player-row{ display:flex; align-items:center; justify-content:space-between; padding:var(--row-pad) 4px; border-bottom:1px solid var(--navy-mid); }
   .player-row:last-child{ border-bottom:none; }
-  .player-name{ font-size:15px; font-weight:500; }
+  .player-name{ font-size:var(--fs-row); font-weight:500; }
 
   .match-card{ background:var(--white); border:1.5px solid var(--navy-mid); border-radius:10px; padding:0; overflow:hidden; margin-bottom:14px; cursor:pointer; }
   .match-date{ padding:9px 16px; font-size:12px; font-weight:700; letter-spacing:0.04em; color:var(--muted); text-transform:uppercase; background:var(--navy-light); }
@@ -107,14 +121,14 @@
   .team-count.warn{ color:var(--danger); }
   .team-total{ font-size:20px; font-weight:800; color:var(--navy); }
 
-  .pick-row{ display:flex; align-items:center; gap:10px; padding:8px 6px; border-bottom:1px solid var(--navy-mid); border-radius:6px; }
+  .pick-row{ display:flex; align-items:center; gap:10px; padding:var(--row-pad) 6px; border-bottom:1px solid var(--navy-mid); border-radius:6px; }
   .pick-row:last-child{ border-bottom:none; }
   .pick-row.checked{ background:var(--navy-light); }
   .pick-row input[type=checkbox]{ width:19px; height:19px; accent-color:var(--navy); flex-shrink:0; }
-  .pick-row .pname{ flex:1; font-size:14.5px; }
-  .col-head{ display:flex; align-items:center; gap:10px; padding:0 6px 4px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; color:var(--muted); }
+  .pick-row .pname{ flex:1; font-size:var(--fs-row); font-weight:500; }
+  .col-head{ display:flex; align-items:center; gap:10px; padding:0 6px 6px; font-size:var(--fs-head); font-weight:700; text-transform:uppercase; letter-spacing:0.03em; color:var(--muted); border-bottom:2px solid var(--navy-mid); }
   .col-head .pname{ flex:1; }
-  .col-head .elo-delta{ color:var(--muted); font-size:10.5px; font-weight:700; }
+  .col-head .elo-delta{ color:var(--muted); font-size:var(--fs-head); font-weight:700; }
   .pick-row .goals-input{ width:60px; text-align:center; padding:6px; }
   .tag{ display:inline-block; font-size:10px; font-weight:600; background:var(--navy-light); color:var(--muted); padding:2px 7px; border-radius:5px; margin-left:6px; vertical-align:middle; }
   .elo-delta{ display:none; font-size:12px; font-weight:600; color:var(--muted); min-width:30px; text-align:right; }
@@ -140,19 +154,21 @@
   .rank-title-strip{ background:var(--navy-light); color:var(--navy); padding:14px 16px; }
   .rank-title-strip .rt{ font-size:24px; margin:0; }
   .rank-title-strip .rs{ font-size:12px; color:var(--muted); margin-top:2px;}
-  table.rank{ width:100%; border-collapse:collapse; font-size:13px; }
-  table.rank th{ text-align:center; padding:9px 4px; font-size:10.5px; text-transform:uppercase; letter-spacing:0.03em; color:var(--muted); border-bottom:2px solid var(--navy-mid); font-weight:700; }
+  table.rank{ width:100%; border-collapse:collapse; font-size:14px; }
+  table.rank th{ text-align:center; padding:9px 4px; font-size:var(--fs-head); text-transform:uppercase; letter-spacing:0.03em; color:var(--muted); border-bottom:2px solid var(--navy-mid); font-weight:700; }
   table.rank th.left, table.rank td.left{ text-align:left; padding-left:12px; }
-  table.rank td{ text-align:center; padding:9px 4px; border-bottom:1px solid var(--navy-mid); }
+  table.rank td{ text-align:center; padding:10px 4px; border-bottom:1px solid var(--navy-mid); }
   table.rank tr:last-child td{ border-bottom:none; }
-  table.rank td.left{ font-weight:600; }
-  table.rank td.pts{ font-weight:700; color:var(--navy); }
-  table.rank td.gf{ background:var(--navy-light); font-weight:700; }
+  table.rank td.left{ font-weight:500; font-size:var(--fs-row); }
+  table.rank td.pts{ font-weight:var(--fw-num); color:var(--navy); }
+  table.rank td.gf{ background:var(--navy-light); font-weight:var(--fw-num); }
   .pos{ display:inline-flex; width:20px; height:20px; border-radius:50%; align-items:center; justify-content:center; font-size:11px; font-weight:700; background:var(--navy-light); color:var(--navy); }
   .pos.g1{ background:var(--navy); color:#fff; }
   .pos.g2{ background:var(--navy-mid); color:var(--navy); }
   .pos.g3{ background:var(--navy-light); color:var(--navy); }
 
+  .list-card{ padding:6px 12px; }
+  .list-card [data-action-group]{ min-width:84px; justify-content:flex-end; }
   .export-bar{ display:flex; gap:10px; margin-top:14px; }
   .config-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
   .config-row input{ width:80px; text-align:center; }
@@ -785,7 +801,8 @@ function renderJugadores(content){
       ${players.length>=30 ? '<div style="font-size:12.5px;color:var(--danger);margin-top:8px;">Límite de 30 jugadores alcanzado.</div>' : ''}
     </div>` : ''}
     <div class="section-title">Plantilla</div>
-    <div class="card" id="playerList" style="padding:6px 12px;">
+    <div class="card list-card" id="playerList">
+      ${players.length>0 ? `<div class="col-head" style="padding-left:4px;"><span class="pname"></span><span style="min-width:64px;text-align:right;">Saldo</span><span style="min-width:68px;text-align:center;">Petos</span>${isAdmin ? '<span style="min-width:84px;"></span>' : ''}</div>` : ''}
       ${players.length===0 ? '<div class="empty"><div class="big">⚽</div>Aún no hay jugadores.</div>' :
         players.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
           const saldo = computeBalance(p.id);
@@ -794,7 +811,7 @@ function renderJugadores(content){
           return `
           <div class="player-row" data-id="${p.id}" data-open-history style="cursor:pointer;">
             <div class="player-name" style="flex:1;">${escapeHtml(p.name)}</div>
-            <div style="min-width:64px;text-align:right;font-weight:800;font-size:13.5px;padding:3px 7px;border-radius:6px;${low?'background:var(--danger-soft);color:var(--danger);':'color:var(--navy);'}">${saldo.toFixed(2)}€</div>
+            <div class="num" style="min-width:64px;text-align:right;padding:3px 7px;border-radius:6px;${low?'background:var(--danger-soft);color:var(--danger);':'color:var(--navy);'}">${saldo.toFixed(2)}€</div>
             <div style="min-width:68px;display:flex;align-items:center;justify-content:center;gap:2px;" ${petosCount>0?`title="Petos: ${petosCount}"`:''}>${petosIcon('#6B7383').repeat(petosCount)}</div>
             ${isAdmin ? `
             <div class="row" data-action-group>
@@ -806,9 +823,9 @@ function renderJugadores(content){
       ${players.length>0 ? (()=>{
         const total = players.reduce((s,p)=>s+computeBalance(p.id), 0);
         const priceThreshold = currentPrice!=null ? currentPrice : 0;
-        return `<div class="player-row" style="background:var(--navy-light);border-top:2px solid var(--navy);margin:2px -12px -6px;padding:11px 12px;border-radius:0 0 8px 8px;">
-          <div class="player-name" style="flex:1;font-weight:800;text-transform:uppercase;font-size:12.5px;letter-spacing:0.03em;color:var(--navy);">Saldo total</div>
-          <div style="min-width:64px;text-align:right;font-weight:800;font-size:15px;color:${total<priceThreshold?'var(--danger)':'var(--navy)'};">${total.toFixed(2)}€</div>
+        return `<div class="player-row" style="background:var(--navy-light);border-top:2px solid var(--navy);margin:2px -12px -6px;padding:var(--row-pad) 12px;border-radius:0 0 8px 8px;">
+          <div class="stat-label" style="flex:1;color:var(--navy);letter-spacing:0.03em;">Saldo total</div>
+          <div class="num" style="min-width:64px;text-align:right;padding-right:7px;font-size:var(--fs-row);color:${total<priceThreshold?'var(--danger)':'var(--navy)'};">${total.toFixed(2)}€</div>
         </div>`;
       })() : ''}
     </div>
@@ -869,7 +886,7 @@ function openPlayerHistory(playerId){
     entries.map(e=>{
       const icon = e.type==='payment' ? '💶' : e.type==='petos' ? petosIcon('#6B7383') : '⚽';
       const amountHtml = e.type==='petos' ? '' :
-        `<div style="font-weight:800;color:${e.amount<0?'var(--danger)':'var(--navy)'};">${e.amount>=0?'+':''}${e.amount.toFixed(2)}€</div>`;
+        `<div class="num" style="color:${e.amount<0?'var(--danger)':'var(--navy)'};">${e.amount>=0?'+':''}${e.amount.toFixed(2)}€</div>`;
       return `<div class="pick-row">
         <div class="pname">${icon} ${fmtDate(e.date)} — ${escapeHtml(e.label)}</div>
         ${amountHtml}
@@ -880,7 +897,7 @@ function openPlayerHistory(playerId){
       <div class="sheet-handle"></div>
       <h2 class="sheet-title">${escapeHtml(p.name)}</h2>
       <div class="card" style="text-align:center;">
-        <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;">Saldo actual</div>
+        <div class="stat-label">Saldo actual</div>
         <div style="font-size:32px;font-weight:800;color:${saldo<0?'var(--danger)':'var(--navy)'};">${saldo.toFixed(2)} €</div>
       </div>
       <div class="section-title">Historial de movimientos</div>
@@ -929,12 +946,12 @@ function openMatchView(matchId){
   const colHead = goalsWidth=> `<div class="col-head"><span class="pname"></span>${showElo() ? '<span class="elo-delta">Elo</span>' : ''}<span style="min-width:${goalsWidth};text-align:right;">Goles</span></div>`;
   const line = (team)=> (m[team]||[]).map(x=>{
     const p = findAnyPlayer(x.playerId);
-    return `<div class="pick-row"><div class="pname">${escapeHtml(p?p.name:'(jugador eliminado)')}</div>${eloDeltaHtml(deltas[x.playerId])}<div style="font-weight:700;min-width:22px;text-align:right;">${x.goals}</div></div>`;
+    return `<div class="pick-row"><div class="pname">${escapeHtml(p?p.name:'(jugador eliminado)')}</div>${eloDeltaHtml(deltas[x.playerId])}<div class="num" style="min-width:22px;text-align:right;">${x.goals}</div></div>`;
   }).join('');
   // Un gol en propia puerta se muestra en el equipo al que suma (el rival del que
   // lo marcó), igual que en el marcador. m.ogVerde = los que ha metido el Verde en
   // su propia portería → suman al Naranja, y viceversa.
-  const ogLine = (og, from)=> Number(og) > 0 ? `<div class="pick-row"><div class="pname">En propia puerta <span style="font-size:11px;color:var(--muted);">(del ${from})</span></div><div style="font-weight:700;min-width:22px;text-align:right;">${Number(og)}</div></div>` : '';
+  const ogLine = (og, from)=> Number(og) > 0 ? `<div class="pick-row"><div class="pname">En propia puerta <span class="note">(del ${from})</span></div><div class="num" style="min-width:22px;text-align:right;">${Number(og)}</div></div>` : '';
   const petosName = m.petos ? (findAnyPlayer(m.petos)?.name || '(jugador eliminado)') : null;
   overlay.innerHTML = `
     <div class="sheet">
@@ -983,10 +1000,10 @@ function openMatchForm(matchId){
       <div class="card">
         <div class="team-select-header v"><div class="label">🟢 Equipo Verde</div><div class="row" style="gap:10px;"><div class="team-total" id="totalVerde">0</div><div class="team-count" id="countVerde">0/6</div></div></div>
         <div id="pickVerde"></div>
-        <div class="pick-row og-row"><div class="pname">En propia puerta <span style="font-size:11px;color:var(--muted);">(suma al rival)</span></div><input type="number" inputmode="numeric" pattern="[0-9]*" class="goals-input" min="0" id="ogVerde" value="${Number(work.ogVerde)||''}" placeholder="0"></div>
+        <div class="pick-row og-row"><div class="pname">En propia puerta <span class="note">(suma al rival)</span></div><input type="number" inputmode="numeric" pattern="[0-9]*" class="goals-input" min="0" id="ogVerde" value="${Number(work.ogVerde)||''}" placeholder="0"></div>
         <div class="team-select-header n"><div class="label">🟠 Equipo Naranja</div><div class="row" style="gap:10px;"><div class="team-total" id="totalNaranja">0</div><div class="team-count" id="countNaranja">0/6</div></div></div>
         <div id="pickNaranja"></div>
-        <div class="pick-row og-row"><div class="pname">En propia puerta <span style="font-size:11px;color:var(--muted);">(suma al rival)</span></div><input type="number" inputmode="numeric" pattern="[0-9]*" class="goals-input" min="0" id="ogNaranja" value="${Number(work.ogNaranja)||''}" placeholder="0"></div>
+        <div class="pick-row og-row"><div class="pname">En propia puerta <span class="note">(suma al rival)</span></div><input type="number" inputmode="numeric" pattern="[0-9]*" class="goals-input" min="0" id="ogNaranja" value="${Number(work.ogNaranja)||''}" placeholder="0"></div>
         <div class="tip-box">💡 Puedes alinear al mismo jugador en los dos equipos si cambia de bando a mitad de partido para equilibrarlo.</div>
       </div>
       ${ELO_TOGGLE_HTML}
@@ -1132,10 +1149,10 @@ function renderPagos(content){
     <div class="section-title">Precio de la cancha</div>
     <div class="card">
       <div style="text-align:center;margin-bottom:14px;">
-        <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;">Precio actual</div>
+        <div class="stat-label" style="letter-spacing:0.05em;">Precio actual</div>
         <div style="font-size:34px;font-weight:800;color:var(--navy);">${currentCourtPrice()!=null ? currentCourtPrice().toFixed(2)+' €' : '— sin definir —'}</div>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Si introduces una fecha que ya existe, sustituye el importe anterior de ese día. Se usa el precio vigente en la fecha de cada partido.</div>
+      <div class="note" style="margin-bottom:10px;">Si introduces una fecha que ya existe, sustituye el importe anterior de ese día. Se usa el precio vigente en la fecha de cada partido.</div>
       <div class="row" style="margin-bottom:10px;">
         <input type="date" id="newPriceDate" value="${todayMadrid()}" style="flex:1;">
         <input type="text" inputmode="decimal" id="newPriceAmount" placeholder="€ (ej. 45 o 45,50)" style="width:130px;">
@@ -1164,7 +1181,7 @@ function renderPagos(content){
       <button class="btn-primary btn-block" id="addPaymentBtn" style="margin-top:10px;">Añadir pago</button>
     </div>
     <div class="section-title">Pagos registrados</div>
-    <div class="card" style="padding:6px 12px;">
+    <div class="card list-card">
       ${sorted.length===0 ? '<div class="empty"><div class="big">💶</div>Aún no hay pagos registrados.</div>' :
         sorted.map(p=>{
           const player = findAnyPlayer(p.playerId);
@@ -1172,8 +1189,8 @@ function renderPagos(content){
           return `
           <div class="player-row" data-id="${p.id}">
             <div style="flex:1;">
-              <div class="player-name">${fmtDate(p.date)} — ${escapeHtml(player?player.name:'(jugador eliminado)')} — <span style="font-weight:800;color:${amt<0?'var(--danger)':'var(--navy)'};">${amt>=0?'+':''}${amt.toFixed(2)} €</span></div>
-              ${p.note ? `<div style="font-size:12px;color:var(--muted);margin-top:2px;">${escapeHtml(p.note)}</div>` : ''}
+              <div class="player-name">${fmtDate(p.date)} — ${escapeHtml(player?player.name:'(jugador eliminado)')} — <span class="num" style="color:${amt<0?'var(--danger)':'var(--navy)'};">${amt>=0?'+':''}${amt.toFixed(2)} €</span></div>
+              ${p.note ? `<div class="note" style="margin-top:2px;">${escapeHtml(p.note)}</div>` : ''}
             </div>
             <div class="row">
               <button class="icon-btn" data-payment-action="edit" data-id="${p.id}">✎</button>
@@ -1184,7 +1201,7 @@ function renderPagos(content){
     </div>
     <div class="section-title">Exportar datos</div>
     <div class="card">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Exporta un archivo con los jugadores, pagos, precios de la cancha y partidos.</div>
+      <div class="note" style="margin-bottom:10px;">Exporta un archivo con los jugadores, pagos, precios de la cancha y partidos.</div>
       <button class="btn-gold btn-block" id="exportDataBtn">Exportar datos (JSON)</button>
     </div>
     <div class="section-title">Color de la app</div>
@@ -1324,7 +1341,7 @@ function renderClasificacion(content){
       const vPts = vn.vWins*3 + vn.draws*1;
       const nPts = vn.nWins*3 + vn.draws*1;
       return `
-      <div class="section-title" style="margin-top:26px;">Verde vs Naranja</div>
+      <div class="section-title">Verde vs Naranja</div>
       <div class="card" style="padding:0;overflow:hidden;">
         <table class="rank">
           <thead><tr><th class="left">Equipo</th><th>Victorias</th><th>Puntos</th><th>Goles</th></tr></thead>
@@ -1336,7 +1353,7 @@ function renderClasificacion(content){
       </div>`;
     })()}
     ${showCharts() ? `
-    <div class="section-title" style="margin-top:26px;">Mapa de jugadores</div>
+    <div class="section-title">Mapa de jugadores</div>
     <div class="card" style="position:relative;height:360px;padding:4px;touch-action:none;">
       <canvas id="bubbleChart" style="display:block;"></canvas>
       <button id="bubbleResetBtn" title="Restablecer" style="position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:7px;border:1px solid var(--navy-mid);background:var(--white);color:var(--navy);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">⟲</button>
@@ -1522,21 +1539,21 @@ function openPlayerStats(playerId){
       <div class="card">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
           <div style="background:var(--navy-light);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;">Goles / partido</div>
+            <div class="stat-label">Goles / partido</div>
             <div style="font-size:20px;font-weight:800;color:var(--navy);">${efGoles.toFixed(2)}</div>
           </div>
           <div style="background:var(--navy-light);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;">Puntos / partido</div>
+            <div class="stat-label">Puntos / partido</div>
             <div style="font-size:20px;font-weight:800;color:var(--navy);">${efPuntos.toFixed(2)}</div>
           </div>
         </div>
       </div>
-      <div class="section-title" style="color:var(--navy);font-size:14px;">⚽ Progresión de goles (acumulado)</div>
+      <div class="section-title sub">⚽ Progresión de goles (acumulado)</div>
       <div class="card"><canvas id="chartGoals${playerId}" height="140"></canvas></div>
-      <div class="section-title" style="color:var(--navy);font-size:14px;">🏆 Progresión de puntos (acumulado)</div>
+      <div class="section-title sub">🏆 Progresión de puntos (acumulado)</div>
       <div class="card"><canvas id="chartPoints${playerId}" height="140"></canvas></div>
       ${eloP ? `
-      <div class="section-title" style="color:var(--navy);font-size:14px;">📈 Progresión del Elo ${ELO_INFO_HTML}</div>
+      <div class="section-title sub">📈 Progresión del Elo ${ELO_INFO_HTML}</div>
       <div class="card"><canvas id="chartElo${playerId}" height="140"></canvas></div>` : ''}
       <div style="text-align:center;font-size:12.5px;color:var(--muted);margin:4px 0 16px;">🟢 Verde: ${vCount} veces · 🟠 Naranja: ${nCount} veces</div>
       <button class="btn-ghost btn-block" id="closeStatsBtn">Cerrar</button>
