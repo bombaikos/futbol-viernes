@@ -38,7 +38,7 @@
     --fs-small:12px;    /* notas, leyendas, texto secundario */
     --fs-head:10.5px;   /* cabeceras de columna */
     --fw-num:700;       /* cifras en listados */
-    --row-pad:11px;     /* relleno vertical de fila */
+    --row-pad:10px;     /* relleno vertical de fila */
     --gap-section:24px; /* separación entre secciones */
     --lh:1.35;
   }
@@ -95,7 +95,7 @@
   .btn-block{ width:100%; }
   .icon-btn{ background:none; border:none; color:var(--muted); font-size:16px; padding:4px 8px; cursor:pointer; }
 
-  .player-row{ display:flex; align-items:center; justify-content:space-between; padding:var(--row-pad) 4px; border-bottom:1px solid var(--navy-mid); }
+  .player-row{ display:flex; align-items:center; justify-content:space-between; padding:var(--row-pad) 12px; border-bottom:1px solid var(--navy-mid); }
   .player-row:last-child{ border-bottom:none; }
   .player-name{ font-size:var(--fs-row); font-weight:500; }
 
@@ -167,7 +167,10 @@
   .pos.g2{ background:var(--navy-mid); color:var(--navy); }
   .pos.g3{ background:var(--navy-light); color:var(--navy); }
 
-  .list-card{ padding:6px 12px; }
+  .card:not(.list-card) > .player-row{ padding-left:4px; padding-right:4px; }
+  .list-card{ padding:0; overflow:hidden; }
+  .list-card .col-head{ padding:10px 12px 6px; }
+  .list-card .num{ font-size:14px; }
   .list-card [data-action-group]{ min-width:84px; justify-content:flex-end; }
   .export-bar{ display:flex; gap:10px; margin-top:14px; }
   .config-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
@@ -802,7 +805,7 @@ function renderJugadores(content){
     </div>` : ''}
     <div class="section-title">Plantilla</div>
     <div class="card list-card" id="playerList">
-      ${players.length>0 ? `<div class="col-head" style="padding-left:4px;"><span class="pname"></span><span style="min-width:64px;text-align:right;">Saldo</span><span style="min-width:68px;text-align:center;">Petos</span>${isAdmin ? '<span style="min-width:84px;"></span>' : ''}</div>` : ''}
+      ${players.length>0 ? `<div class="col-head"><span class="pname"></span><span style="min-width:64px;text-align:right;">Saldo</span><span style="min-width:68px;text-align:center;">Petos</span>${isAdmin ? '<span style="min-width:84px;"></span>' : ''}</div>` : ''}
       ${players.length===0 ? '<div class="empty"><div class="big">⚽</div>Aún no hay jugadores.</div>' :
         players.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
           const saldo = computeBalance(p.id);
@@ -823,9 +826,9 @@ function renderJugadores(content){
       ${players.length>0 ? (()=>{
         const total = players.reduce((s,p)=>s+computeBalance(p.id), 0);
         const priceThreshold = currentPrice!=null ? currentPrice : 0;
-        return `<div class="player-row" style="background:var(--navy-light);border-top:2px solid var(--navy);margin:2px -12px -6px;padding:var(--row-pad) 12px;border-radius:0 0 8px 8px;">
+        return `<div class="player-row" style="background:var(--navy-light);border-top:2px solid var(--navy);border-radius:0 0 8px 8px;">
           <div class="stat-label" style="flex:1;color:var(--navy);letter-spacing:0.03em;">Saldo total</div>
-          <div class="num" style="min-width:64px;text-align:right;padding-right:7px;font-size:var(--fs-row);color:${total<priceThreshold?'var(--danger)':'var(--navy)'};">${total.toFixed(2)}€</div>
+          <div class="num" style="min-width:64px;text-align:right;padding-right:7px;color:${total<priceThreshold?'var(--danger)':'var(--navy)'};">${total.toFixed(2)}€</div>
         </div>`;
       })() : ''}
     </div>
