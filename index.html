@@ -340,20 +340,19 @@ function buildPlayerHistory(playerId){
       const price = priceAt(m.date);
       if(price!=null){
         const allIds = new Set([...(m.verde||[]).map(x=>x.playerId), ...(m.naranja||[]).map(x=>x.playerId)]);
-        const n = allIds.size;
-        if(n>0){
-          const baseShare = price / n;
-          let unsponsoredGuests = 0;
-          allIds.forEach(id=>{
-            if(isGuestId(id)){
-              const eV=(m.verde||[]).find(x=>x.playerId===id), eN=(m.naranja||[]).find(x=>x.playerId===id);
-              const paga = (eV ? eV.paga : undefined) ?? (eN ? eN.paga : undefined) ?? true;
-              if(paga===false) unsponsoredGuests++;
-            }
-          });
-          const plantillaIds = [...allIds].filter(id=>players.some(p=>p.id===id));
-          const extra = plantillaIds.length ? (unsponsoredGuests*baseShare)/plantillaIds.length : 0;
-          entries.push({ date:m.date, type:'charge', label:`Partido (cancha ${price.toFixed(2)}€ ÷ ${n})`, amount:-(baseShare+extra) });
+        // La cancha se reparte solo entre quienes pagan: plantilla + invitados
+        // que pagan. Los invitados marcados como "no paga" no cuentan.
+        let unsponsoredGuests = 0;
+        allIds.forEach(id=>{
+          if(isGuestId(id)){
+            const eV=(m.verde||[]).find(x=>x.playerId===id), eN=(m.naranja||[]).find(x=>x.playerId===id);
+            const paga = (eV ? eV.paga : undefined) ?? (eN ? eN.paga : undefined) ?? true;
+            if(paga===false) unsponsoredGuests++;
+          }
+        });
+        const payers = allIds.size - unsponsoredGuests;
+        if(payers>0){
+          entries.push({ date:m.date, type:'charge', label:`Partido (cancha ${price.toFixed(2)}€ ÷ ${payers})`, amount:-(price/payers) });
         }
       }
     }
